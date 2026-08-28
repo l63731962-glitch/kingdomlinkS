@@ -1,0 +1,3946 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KingdomLink</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,500;0,9..144,600;1,9..144,500&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+
+:root{
+  --ink:#1B2430;
+  --ink-soft:#2B3646;
+  --parchment:#F7F3EC;
+  --parchment-dim:#EFE9DE;
+  --green:#4C7A6B;
+  --green-soft:#DCE7E2;
+  --clay:#C97A5D;
+  --clay-soft:#F4E3DA;
+  --gold:#B8912F;
+  --gold-soft:#F3E7C8;
+  --slate:#6B7280;
+  --line: rgba(27,36,48,0.10);
+  --line-strong: rgba(27,36,48,0.18);
+  --shadow: 0 8px 24px rgba(27,36,48,0.08);
+  --radius: 10px;
+}
+[data-theme="dark"]{
+  --ink:#F0EDE6;
+  --ink-soft:#D8D3C8;
+  --parchment:#14181F;
+  --parchment-dim:#1C222C;
+  --green:#5E9683;
+  --green-soft:#1E2E29;
+  --clay:#D98C6C;
+  --clay-soft:#2E211C;
+  --gold:#D9B45D;
+  --gold-soft:#2E2717;
+  --slate:#8B93A0;
+  --line: rgba(240,237,230,0.10);
+  --line-strong: rgba(240,237,230,0.18);
+  --shadow: 0 10px 30px rgba(0,0,0,0.35);
+}
+
+*{ box-sizing:border-box; }
+html,body{ margin:0; padding:0; }
+body{
+  background:var(--parchment);
+  color:var(--ink);
+  font-family:'Inter', sans-serif;
+  font-size:14.5px;
+  line-height:1.5;
+  transition:background 0.2s ease, color 0.2s ease;
+  min-height:100vh;
+}
+.mono{ font-family:'JetBrains Mono', monospace; }
+.serif{ font-family:'Fraunces', serif; }
+
+button{ font-family:inherit; cursor:pointer; border:none; background:none; color:inherit; }
+input,select{ font-family:inherit; font-size:inherit; color:inherit; }
+a{ color:inherit; }
+
+/* -------- Layout -------- */
+.app{ display:none; min-height:100vh; }
+.app.active{ display:flex; }
+
+.sidebar{
+  width:220px;
+  flex-shrink:0;
+  border-right:1px solid var(--line);
+  padding:24px 18px;
+  display:flex;
+  flex-direction:column;
+  gap:4px;
+}
+.brand{
+  font-family:'Fraunces', serif;
+  font-size:19px;
+  font-weight:600;
+  letter-spacing:0.01em;
+  margin-bottom:28px;
+  display:flex;
+  align-items:center;
+  gap:10px;
+}
+.brand-mark{
+  width:26px; height:26px;
+  border-radius:6px;
+  background:var(--clay);
+  display:flex; align-items:center; justify-content:center;
+  color:#fff;
+  font-size:12px;
+  font-weight:600;
+  flex-shrink:0;
+}
+.nav-item{
+  display:flex; align-items:center; gap:10px;
+  padding:9px 12px;
+  border-radius:8px;
+  font-size:13.5px;
+  color:var(--ink-soft);
+  text-align:left;
+  transition:background 0.15s ease, color 0.15s ease;
+}
+.nav-item:hover{ background:var(--parchment-dim); color:var(--ink); }
+.nav-item.active{ background:var(--clay-soft); color:var(--clay); font-weight:500; }
+.nav-item svg{ width:16px; height:16px; flex-shrink:0; }
+.nav-badge{
+  margin-left:auto;
+  background:var(--clay);
+  color:#fff;
+  font-size:10.5px;
+  font-weight:600;
+  min-width:17px; height:17px;
+  border-radius:9px;
+  display:flex; align-items:center; justify-content:center;
+  padding:0 5px;
+}
+.sidebar-foot{
+  margin-top:auto;
+  padding-top:16px;
+  border-top:1px solid var(--line);
+  display:flex; align-items:center; justify-content:space-between;
+}
+.who{ font-size:12.5px; color:var(--slate); }
+.who b{ display:block; color:var(--ink); font-size:13px; font-weight:500; }
+
+.main{ flex:1; padding:28px 36px; max-width:920px; }
+.page{ display:none; }
+.page.active{ display:block; }
+
+/* -------- Mobile top bar + slide-in drawer (hidden on desktop) -------- */
+.mobile-topbar{ display:none; }
+.mobile-drawer-overlay{ display:none; }
+.mobile-drawer{ display:none; }
+
+.page-head{ display:flex; align-items:baseline; justify-content:space-between; margin-bottom:22px; }
+.page-title{ font-family:'Fraunces', serif; font-size:24px; font-weight:600; }
+.page-sub{ color:var(--slate); font-size:13px; margin-top:3px; }
+
+.icon-btn{
+  width:34px; height:34px;
+  border-radius:8px;
+  border:1px solid var(--line);
+  display:flex; align-items:center; justify-content:center;
+  color:var(--ink-soft);
+  transition:background 0.15s ease;
+}
+.icon-btn:hover{ background:var(--parchment-dim); }
+.icon-btn svg{ width:16px; height:16px; }
+
+/* -------- Ledger (the signature element) -------- */
+.ledger{ border-top:1px solid var(--line-strong); }
+.ledger-row{
+  display:grid;
+  grid-template-columns: 1fr 150px 90px 140px;
+  gap:16px;
+  align-items:center;
+  padding:14px 4px;
+  border-bottom:1px solid var(--line);
+}
+.ledger-row.escalated{ background:var(--gold-soft); margin:0 -12px; padding-left:16px; padding-right:16px; border-radius:6px; border-bottom-color:transparent; }
+.ledger-row.escalated + .ledger-row{ margin-top:2px; }
+.led-name{ font-weight:500; font-size:14px; }
+.led-meta{ font-size:12px; color:var(--slate); margin-top:2px; }
+.led-flag{ color:var(--gold); font-weight:600; }
+.led-phone{
+  font-size:13px;
+  color:var(--ink-soft);
+  border-bottom:1px solid transparent;
+  transition:border-color 0.15s ease, color 0.15s ease;
+}
+.led-phone:hover{ border-color:var(--clay); color:var(--clay); }
+.led-status{ font-size:12px; }
+.status-pending{ color:var(--clay); }
+.status-done{ color:var(--green); }
+.led-action select{
+  width:100%;
+  padding:6px 8px;
+  border-radius:7px;
+  border:1px solid var(--line-strong);
+  background:var(--parchment);
+  font-size:12.5px;
+}
+.led-action button{
+  width:100%;
+  padding:7px 8px;
+  border-radius:7px;
+  background:var(--clay);
+  color:#fff;
+  font-size:12.5px;
+  font-weight:500;
+  margin-top:6px;
+}
+.led-action button:disabled{ opacity:0.4; cursor:default; }
+
+/* -------- Attendance toggle -------- */
+.att-row{
+  display:flex; align-items:center; justify-content:space-between;
+  gap:12px;
+  padding:11px 4px;
+  border-bottom:1px solid var(--line);
+}
+.att-row:last-child{ border-bottom:none; }
+.att-name{ font-weight:500; font-size:13.5px; }
+.att-role{ font-size:11.5px; color:var(--slate); margin-top:1px; }
+.att-toggle{
+  display:flex; flex-shrink:0;
+  border-radius:8px;
+  overflow:hidden;
+  border:1px solid var(--line-strong);
+}
+.att-toggle button{
+  width:38px; height:32px;
+  display:flex; align-items:center; justify-content:center;
+  background:var(--parchment);
+  color:var(--slate);
+  transition:background 0.12s ease, color 0.12s ease;
+}
+.att-toggle button svg{ width:16px; height:16px; }
+.att-toggle button.absent-btn:hover{ background:var(--clay-soft); color:var(--clay); }
+.att-toggle button.present-btn:hover{ background:var(--green-soft); color:var(--green); }
+.att-toggle button.absent-btn.active{ background:var(--clay); color:#fff; }
+.att-toggle button.present-btn.active{ background:var(--green); color:#fff; }
+.att-toggle button.absent-btn{ border-right:1px solid var(--line-strong); }
+.att-summary{
+  display:flex; gap:16px;
+  padding:10px 2px 14px;
+  font-size:12.5px; color:var(--slate);
+}
+.att-summary b{ color:var(--ink); }
+.att-search{
+  width:100%; margin-bottom:10px;
+}
+
+/* -------- Help & guide -------- */
+.help-section{
+  background:var(--parchment-dim);
+  border-radius:var(--radius);
+  border:1px solid var(--line);
+  padding:18px 20px;
+  margin-bottom:14px;
+}
+.help-heading{
+  font-size:16px;
+  font-weight:600;
+  color:var(--ink);
+  margin-bottom:8px;
+}
+.help-body{
+  font-size:13.5px;
+  line-height:1.65;
+  color:var(--ink);
+}
+.help-body p{ margin:0 0 10px; }
+.help-body p:last-child{ margin-bottom:0; }
+.help-body ul{ margin:0 0 10px; padding-left:20px; }
+.help-body li{ margin-bottom:4px; }
+.help-body b{ color:var(--ink); font-weight:600; }
+
+.led-note{
+  grid-column:1 / -1;
+  margin-top:6px;
+}
+.led-note textarea{
+  width:100%;
+  border:1px solid var(--line-strong);
+  border-radius:7px;
+  background:var(--parchment);
+  padding:8px 10px;
+  font-size:12.5px;
+  font-family:inherit;
+  color:inherit;
+  resize:vertical;
+  min-height:44px;
+}
+
+.empty{
+  text-align:center;
+  padding:52px 20px;
+  color:var(--slate);
+}
+.empty svg{ width:34px; height:34px; margin-bottom:12px; opacity:0.5; }
+.empty b{ display:block; color:var(--ink); font-size:14.5px; margin-bottom:4px; }
+.empty p{ font-size:13px; margin:0; }
+
+/* -------- Cards / stats -------- */
+.stat-row{ display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:26px; }
+.stat-card{
+  background:var(--parchment-dim);
+  border-radius:var(--radius);
+  padding:16px;
+  border:1px solid var(--line);
+}
+.stat-val{ font-family:'Fraunces', serif; font-size:26px; font-weight:600; }
+.stat-label{ font-size:12px; color:var(--slate); margin-top:2px; }
+.stat-card.clay .stat-val{ color:var(--clay); }
+.stat-card.green .stat-val{ color:var(--green); }
+.stat-card.gold .stat-val{ color:var(--gold); }
+
+.section-label{
+  font-size:11.5px;
+  text-transform:uppercase;
+  letter-spacing:0.06em;
+  color:var(--slate);
+  margin:26px 0 10px;
+  font-weight:600;
+}
+.section-label:first-child{ margin-top:0; }
+
+/* -------- Zoned panels (leader accountability, cell leaders) -------- */
+.leader-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fill, minmax(300px, 1fr));
+  gap:14px;
+}
+.leader-card{
+  position:relative;
+  border-radius:14px;
+  border:1px solid var(--line);
+  background:var(--parchment-dim);
+  padding:20px 20px 18px;
+  transition:border-color 0.15s ease, transform 0.15s ease;
+}
+.leader-card:hover{ border-color:var(--line-strong); transform:translateY(-1px); }
+.leader-card.zone-ok{ background:var(--green-soft); border-color:rgba(76,122,107,0.18); }
+.leader-card.zone-flag{ background:var(--clay-soft); border-color:rgba(201,122,93,0.2); }
+.leader-card.zone-senior{ background:var(--gold-soft); border-color:rgba(184,145,47,0.22); }
+
+.leader-card .leader-mark{
+  width:36px; height:36px;
+  border-radius:9px;
+  display:flex; align-items:center; justify-content:center;
+  font-family:'Fraunces', serif;
+  font-weight:600;
+  font-size:14px;
+  color:#fff;
+  margin-bottom:14px;
+}
+.zone-ok .leader-mark{ background:var(--green); }
+.zone-flag .leader-mark{ background:var(--clay); }
+.zone-senior .leader-mark{ background:var(--gold); }
+
+.leader-card .card-pill{
+  position:absolute;
+  top:18px; right:18px;
+  font-size:10px;
+  font-weight:600;
+  text-transform:uppercase;
+  letter-spacing:0.05em;
+  padding:4px 9px;
+  border-radius:20px;
+  background:rgba(255,255,255,0.5);
+}
+[data-theme="dark"] .leader-card .card-pill{ background:rgba(0,0,0,0.2); }
+.card-pill.ok{ color:var(--green); }
+.card-pill.flag{ color:var(--clay); }
+.card-pill.senior{ color:var(--gold); }
+
+.leader-card .card-name{
+  font-family:'Fraunces', serif;
+  font-size:17px;
+  font-weight:600;
+  margin-bottom:2px;
+  padding-right:70px;
+}
+.leader-card .card-meta{ font-size:12.5px; color:var(--slate); margin-bottom:14px; }
+
+.card-facts{ display:flex; flex-direction:column; gap:6px; }
+.card-fact{
+  display:flex; align-items:baseline; gap:8px;
+  font-size:12.5px;
+  color:var(--ink-soft);
+}
+.card-fact::before{
+  content:'';
+  width:5px; height:5px;
+  border-radius:50%;
+  background:currentColor;
+  opacity:0.55;
+  flex-shrink:0;
+}
+.zone-ok .card-fact{ color:var(--green); }
+.zone-flag .card-fact{ color:var(--clay); }
+.zone-senior .card-fact{ color:var(--gold); }
+.card-fact b{ color:var(--ink); font-weight:500; }
+
+/* -------- Birthday list -------- */
+.bday-row{
+  display:flex; align-items:center; justify-content:space-between;
+  padding:11px 4px;
+  border-bottom:1px solid var(--line);
+}
+.bday-when{
+  font-size:11.5px;
+  padding:3px 9px;
+  border-radius:12px;
+  background:var(--green-soft);
+  color:var(--green);
+  font-weight:500;
+  white-space:nowrap;
+}
+
+/* -------- Leader accountability -------- */
+.leader-row{
+  display:grid;
+  grid-template-columns: 1fr 100px 130px 90px;
+  gap:16px;
+  align-items:center;
+  padding:13px 4px;
+  border-bottom:1px solid var(--line);
+}
+.pill{
+  font-size:11px;
+  padding:3px 9px;
+  border-radius:12px;
+  font-weight:500;
+  display:inline-block;
+}
+.pill.ok{ background:var(--green-soft); color:var(--green); }
+.pill.flag{ background:var(--gold-soft); color:var(--gold); }
+.pill.senior{ background:var(--clay-soft); color:var(--clay); }
+.pill.role-admin{ background:var(--clay-soft); color:var(--clay); }
+.pill.role-leader{ background:var(--gold-soft); color:var(--gold); }
+.pill.role-adult{ background:var(--green-soft); color:var(--green); }
+.pill.role-teen{ background:var(--gold-soft); color:var(--slate); }
+.pill.role-child{ background:var(--parchment-dim); color:var(--slate); }
+
+/* -------- Members roster -------- */
+.member-group{ margin-bottom:6px; }
+.member-group-head{
+  display:flex; align-items:center; gap:10px;
+  padding:10px 4px;
+  cursor:pointer;
+  user-select:none;
+}
+.member-group-head:hover .member-group-title{ color:var(--clay); }
+.member-group-title{
+  font-size:11.5px; text-transform:uppercase; letter-spacing:0.06em;
+  color:var(--slate); font-weight:600;
+  transition:color 0.15s ease;
+}
+.member-group-count{
+  font-size:11px; color:var(--slate);
+  background:var(--parchment-dim);
+  border-radius:10px; padding:1px 8px;
+}
+.member-group-chevron{
+  margin-left:auto; width:14px; height:14px; color:var(--slate);
+  transition:transform 0.15s ease;
+}
+.member-group.collapsed .member-group-chevron{ transform:rotate(-90deg); }
+.member-group.collapsed .member-group-body{ display:none; }
+.member-row{
+  display:grid;
+  grid-template-columns: 1fr 160px 130px;
+  gap:16px;
+  align-items:center;
+  padding:12px 4px;
+  border-bottom:1px solid var(--line);
+}
+.member-row .led-meta a{ color:inherit; }
+.member-row .led-meta a:hover{ color:var(--clay); }
+.page-head-actions{ display:flex; align-items:center; gap:10px; }
+.btn-small{
+  padding:9px 14px;
+  border-radius:8px;
+  background:var(--clay);
+  color:#fff;
+  font-size:12.5px;
+  font-weight:500;
+  display:inline-flex; align-items:center; gap:6px;
+  white-space:nowrap;
+}
+.btn-small svg{ width:14px; height:14px; }
+.member-search{
+  padding:9px 12px;
+  border-radius:8px;
+  border:1px solid var(--line-strong);
+  background:var(--parchment-dim);
+  font-size:13px;
+  min-width:200px;
+}
+.member-search:focus{
+  outline:none; border-color:var(--clay); box-shadow:0 0 0 3px var(--clay-soft);
+}
+
+/* -------- Modal -------- */
+.modal-overlay{
+  position:fixed; inset:0;
+  background:rgba(27,36,48,0.45);
+  display:none;
+  align-items:flex-start; justify-content:center;
+  padding:40px 16px;
+  overflow-y:auto;
+  z-index:100;
+}
+.modal-overlay.active{ display:flex; animation: login-fade 0.15s ease; }
+.modal-box{
+  background:var(--parchment);
+  border-radius:var(--radius);
+  border:1px solid var(--line-strong);
+  box-shadow:var(--shadow);
+  width:100%; max-width:480px;
+  padding:24px;
+  animation: login-rise 0.2s ease;
+}
+.modal-head{
+  display:flex; align-items:flex-start; justify-content:space-between;
+  margin-bottom:18px;
+}
+.modal-title{ font-family:'Fraunces', serif; font-size:19px; font-weight:600; }
+.modal-sub{ font-size:12.5px; color:var(--slate); margin-top:3px; }
+.modal-close{
+  width:28px; height:28px; border-radius:7px;
+  display:flex; align-items:center; justify-content:center;
+  color:var(--slate); flex-shrink:0;
+}
+.member-row{ cursor:pointer; transition:background 0.15s ease; }
+.member-row:hover{ background:var(--parchment-dim); margin:0 -8px; padding-left:12px; padding-right:12px; border-radius:6px; }
+.detail-field{ margin-bottom:14px; }
+.detail-label{ font-size:11.5px; color:var(--slate); text-transform:uppercase; letter-spacing:0.05em; margin-bottom:3px; }
+.detail-value{ font-size:14px; }
+.detail-value.empty{ color:var(--slate); font-style:italic; }
+.modal-close:hover{ background:var(--parchment-dim); color:var(--ink); }
+.modal-close svg{ width:16px; height:16px; }
+.modal-actions{ display:flex; gap:10px; margin-top:20px; }
+.modal-actions .btn-primary{ width:auto; flex:1; }
+.btn-ghost{
+  padding:12px 16px;
+  border-radius:8px;
+  border:1px solid var(--line-strong);
+  color:var(--ink-soft);
+  font-size:13.5px; font-weight:500;
+}
+.btn-ghost:hover{ background:var(--parchment-dim); }
+.field-err{
+  font-size:12px; color:var(--clay);
+  margin-top:10px;
+  display:flex; align-items:center; gap:6px;
+}
+.field-err svg{ width:14px; height:14px; flex-shrink:0; }
+.field-err:empty{ display:none; }
+
+/* -------- Login -------- */
+.login-screen{
+  min-height:100vh;
+  display:grid;
+  grid-template-columns: 1.1fr 1fr;
+  position:relative;
+  overflow:hidden;
+}
+.login-hero{
+  position:relative;
+  display:flex; flex-direction:column; justify-content:space-between;
+  padding:56px 48px;
+  background:
+    radial-gradient(ellipse 900px 700px at 15% 10%, var(--gold-soft) 0%, transparent 55%),
+    radial-gradient(ellipse 800px 900px at 85% 90%, var(--green-soft) 0%, transparent 60%),
+    var(--parchment-dim);
+  border-right:1px solid var(--line);
+  overflow:hidden;
+}
+.login-hero::before{
+  content:'';
+  position:absolute; inset:0;
+  background-image:
+    repeating-linear-gradient(0deg, var(--line) 0px, var(--line) 1px, transparent 1px, transparent 34px);
+  opacity:0.5;
+  pointer-events:none;
+}
+.login-hero-top{ position:relative; z-index:1; }
+.login-hero-mark{
+  width:46px; height:46px; border-radius:11px;
+  background:var(--clay); color:#fff;
+  display:flex; align-items:center; justify-content:center;
+  font-family:'Fraunces', serif; font-weight:600; font-size:20px;
+  box-shadow:0 6px 18px rgba(201,122,93,0.35);
+  margin-bottom:22px;
+}
+.login-hero-title{
+  font-family:'Fraunces', serif; font-weight:600; font-size:34px;
+  line-height:1.15; letter-spacing:-0.01em;
+  max-width:420px;
+  margin-bottom:14px;
+}
+.login-hero-title em{ font-style:italic; color:var(--clay); }
+.login-hero-sub{
+  color:var(--slate); font-size:14.5px; line-height:1.65;
+  max-width:380px;
+}
+.login-hero-panels{
+  position:relative; z-index:1;
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:14px;
+  margin-top:30px;
+}
+.hero-panel{
+  position:relative;
+  border-radius:14px;
+  border:1px solid var(--line-strong);
+  padding:20px 18px;
+  overflow:hidden;
+  transition:transform 0.2s ease, box-shadow 0.2s ease;
+}
+.hero-panel:hover{ transform:translateY(-2px); box-shadow:var(--shadow); }
+.hero-panel.p-clay{ background:radial-gradient(ellipse 220px 180px at 20% -10%, var(--clay-soft) 0%, transparent 70%), var(--parchment); }
+.hero-panel.p-green{ background:radial-gradient(ellipse 220px 180px at 20% -10%, var(--green-soft) 0%, transparent 70%), var(--parchment); }
+.hero-panel-tag{
+  position:absolute; top:14px; right:14px;
+  font-size:9.5px; font-weight:600; text-transform:uppercase; letter-spacing:0.06em;
+  padding:3px 8px; border-radius:10px;
+}
+.p-clay .hero-panel-tag{ background:var(--clay-soft); color:var(--clay); }
+.p-green .hero-panel-tag{ background:var(--green-soft); color:var(--green); }
+.hero-panel-icon{
+  width:32px; height:32px; border-radius:8px;
+  display:flex; align-items:center; justify-content:center;
+  margin-bottom:14px;
+}
+.hero-panel-icon svg{ width:16px; height:16px; }
+.p-clay .hero-panel-icon{ background:var(--clay); color:#fff; }
+.p-green .hero-panel-icon{ background:var(--green); color:#fff; }
+.hero-panel-title{
+  font-family:'Fraunces', serif; font-weight:600; font-size:15.5px;
+  letter-spacing:0.01em; margin-bottom:8px;
+  text-transform:uppercase;
+}
+.hero-panel ul{
+  list-style:none; margin:0; padding:0;
+  display:flex; flex-direction:column; gap:7px;
+}
+.hero-panel li{
+  display:flex; align-items:flex-start; gap:8px;
+  font-size:11.5px; line-height:1.45; color:var(--ink-soft);
+}
+.hero-panel li::before{
+  content:''; width:5px; height:5px; border-radius:50%;
+  margin-top:5px; flex-shrink:0;
+}
+.p-clay li::before{ background:var(--clay); }
+.p-green li::before{ background:var(--green); }
+.login-hero-foot{
+  position:relative; z-index:1;
+  font-size:12px; color:var(--slate);
+  padding-top:20px; border-top:1px solid var(--line);
+}
+.login-panel{
+  display:flex; align-items:center; justify-content:center;
+  padding:40px 20px;
+  position:relative;
+}
+.login-card{
+  width:100%; max-width:380px;
+  animation: login-rise 0.5s cubic-bezier(0.16,1,0.3,1);
+}
+@keyframes login-rise{
+  from{ opacity:0; transform:translateY(10px); }
+  to{ opacity:1; transform:translateY(0); }
+}
+.login-brand{
+  font-family:'Fraunces', serif; font-size:21px; font-weight:600;
+  display:flex; align-items:center; gap:10px; margin-bottom:4px;
+}
+.login-sub{ color:var(--slate); font-size:13px; margin-bottom:26px; }
+.login-tabs{
+  display:flex; gap:4px;
+  background:var(--parchment-dim);
+  border:1px solid var(--line);
+  border-radius:10px;
+  padding:4px;
+  margin-bottom:24px;
+}
+.login-tab{
+  flex:1; text-align:center;
+  padding:8px 10px;
+  border-radius:7px;
+  font-size:12.5px; font-weight:500;
+  color:var(--slate);
+  transition:background 0.15s ease, color 0.15s ease;
+}
+.login-tab.active{
+  background:var(--parchment);
+  color:var(--ink);
+  box-shadow:0 1px 3px rgba(27,36,48,0.08);
+}
+.login-form{ display:none; }
+.login-form.active{ display:block; animation: login-fade 0.25s ease; }
+@keyframes login-fade{ from{ opacity:0; } to{ opacity:1; } }
+.field{ margin-bottom:14px; }
+.field label{ display:block; font-size:12px; color:var(--slate); margin-bottom:5px; font-weight:500; }
+.field-row{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+.field input, .field select{
+  width:100%;
+  padding:10px 12px;
+  border-radius:8px;
+  border:1px solid var(--line-strong);
+  background:var(--parchment-dim);
+  font-size:13.5px;
+  transition:border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.field input:focus, .field select:focus{
+  outline:none;
+  border-color:var(--clay);
+  box-shadow:0 0 0 3px var(--clay-soft);
+}
+.field-hint{ font-size:11.5px; color:var(--slate); margin-top:5px; }
+.field-password-wrap{ position:relative; }
+.field-password-wrap input{ padding-right:40px; }
+.field-password-toggle{
+  position:absolute;
+  right:6px;
+  top:50%;
+  transform:translateY(-50%);
+  width:28px;
+  height:28px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  border:none;
+  background:transparent;
+  color:var(--slate);
+  cursor:pointer;
+  border-radius:6px;
+  padding:0;
+}
+.field-password-toggle:hover{ background:var(--parchment-dim); color:var(--ink); }
+.field-password-toggle svg{ width:17px; height:17px; }
+.btn-primary{
+  width:100%;
+  padding:12px;
+  border-radius:8px;
+  background:var(--clay);
+  color:#fff;
+  font-weight:500;
+  font-size:13.5px;
+  margin-top:8px;
+  display:flex; align-items:center; justify-content:center; gap:8px;
+  box-shadow:0 4px 14px rgba(201,122,93,0.3);
+  transition:filter 0.15s ease, transform 0.1s ease;
+}
+.btn-primary:hover{ filter:brightness(1.06); }
+.btn-primary:active{ transform:translateY(1px); }
+.btn-primary:disabled{ opacity:0.6; cursor:not-allowed; }
+.btn-danger{
+  padding:9px 14px; border-radius:8px;
+  background:#c0503c; color:#fff;
+  font-size:12.5px; font-weight:500;
+  display:inline-flex; align-items:center; gap:6px;
+}
+.btn-danger:hover{ filter:brightness(1.08); }
+.btn-danger:disabled{ opacity:0.5; cursor:not-allowed; }
+.btn-secondary{
+  padding:9px 14px; border-radius:8px;
+  background:var(--gold-soft); color:var(--gold);
+  font-size:12.5px; font-weight:500;
+  display:inline-flex; align-items:center; gap:6px;
+}
+.btn-secondary:hover{ filter:brightness(0.97); }
+.btn-secondary:disabled{ opacity:0.5; cursor:not-allowed; }
+.role-actions{ display:flex; flex-wrap:wrap; gap:8px; margin-top:18px; padding-top:16px; border-top:1px solid var(--line); }
+.head-admin-note{
+  margin-top:18px; padding:12px 14px; border-radius:8px;
+  background:var(--clay-soft); color:var(--clay);
+  font-size:12.5px; display:flex; align-items:center; gap:8px;
+}
+.head-admin-note svg{ width:15px; height:15px; flex-shrink:0; }
+.audit-row{
+  display:grid; grid-template-columns: 1fr 1fr 90px;
+  gap:14px; align-items:center;
+  padding:12px 4px; border-bottom:1px solid var(--line);
+  font-size:13px;
+}
+.audit-action{ font-weight:500; }
+.audit-change{ color:var(--slate); font-size:12px; }
+.audit-time{ color:var(--slate); font-size:11.5px; text-align:right; }
+.role-mgmt-row{
+  display:grid; grid-template-columns: 1fr 100px auto;
+  gap:14px; align-items:center;
+  padding:12px 4px; border-bottom:1px solid var(--line);
+}
+.role-mgmt-actions{ display:flex; gap:6px; }
+.role-mgmt-actions button{ padding:6px 10px; font-size:11.5px; }
+.btn-primary .spin{
+  width:14px; height:14px;
+  border:2px solid rgba(255,255,255,0.4);
+  border-top-color:#fff;
+  border-radius:50%;
+  animation:spin 0.7s linear infinite;
+  display:none;
+}
+.btn-primary.loading .spin{ display:inline-block; }
+.btn-primary.loading .btn-label{ opacity:0.85; }
+@keyframes spin{ to{ transform:rotate(360deg); } }
+.login-err{
+  color:var(--clay); font-size:12.5px; margin-top:12px; min-height:16px;
+  display:flex; align-items:center; gap:6px;
+}
+.login-err svg{ width:14px; height:14px; flex-shrink:0; }
+.login-ok{
+  color:var(--green); font-size:12.5px; margin-top:12px;
+  display:flex; align-items:center; gap:6px;
+}
+.login-theme{ position:fixed; top:20px; right:20px; z-index:5; }
+
+@media (max-width:860px){
+  .login-screen{ grid-template-columns:1fr; grid-template-rows:auto 1fr; }
+  .login-hero{
+    border-right:none; border-bottom:1px solid var(--line);
+    padding:32px 24px 28px;
+  }
+  .login-hero-title{ font-size:26px; max-width:none; }
+  .login-hero-sub{ max-width:none; font-size:13.5px; }
+  .login-hero-foot{ display:none; }
+  .login-panel{ padding:28px 16px 40px; }
+}
+
+@media (max-width:640px){
+  .login-hero{ padding:26px 18px 22px; }
+  .login-hero-title{ font-size:22px; }
+  .login-hero-panels{ grid-template-columns:1fr; margin-top:22px; gap:10px; }
+  .hero-panel{ padding:16px 15px; }
+}
+
+@media (max-width:1040px){
+  .login-hero-panels{ grid-template-columns:1fr; }
+}
+
+@media (max-width:760px){
+  .sidebar{ display:none; }
+  .main{ padding:20px; max-width:none; }
+  .ledger-row{ grid-template-columns:1fr; gap:6px; }
+  .led-action{ display:flex; gap:8px; }
+  .led-action select{ flex:1; }
+  .led-action button{ width:auto; margin-top:0; padding:7px 14px; }
+  .stat-row{ grid-template-columns:repeat(2,1fr); }
+  .leader-row{ grid-template-columns:1fr; gap:4px; }
+
+  .mobile-topbar{
+    display:flex; align-items:center; gap:12px;
+    padding:14px 18px;
+    border-bottom:1px solid var(--line);
+    position:sticky; top:0; z-index:20;
+    background:var(--parchment);
+  }
+  .mobile-topbar .brand{ margin-bottom:0; font-size:16.5px; }
+
+  .mobile-drawer-overlay{
+    display:block;
+    position:fixed; inset:0;
+    background:rgba(0,0,0,0.35);
+    z-index:29;
+    opacity:0; pointer-events:none;
+    transition:opacity 0.2s ease;
+  }
+  .mobile-drawer-overlay.open{ opacity:1; pointer-events:auto; }
+
+  .mobile-drawer{
+    display:flex; flex-direction:column; gap:4px;
+    position:fixed; top:0; left:0; bottom:0;
+    width:250px; max-width:80vw;
+    padding:20px 16px;
+    background:var(--parchment);
+    border-right:1px solid var(--line);
+    z-index:30;
+    transform:translateX(-100%);
+    transition:transform 0.25s ease;
+    overflow-y:auto;
+  }
+  .mobile-drawer.open{ transform:translateX(0); }
+  .mobile-drawer .sidebar-foot{
+    margin-top:auto; padding-top:16px;
+    border-top:1px solid var(--line);
+    display:flex; align-items:center; justify-content:space-between;
+  }
+}
+
+/* Above 760px the drawer/overlay must never trap clicks even if left open */
+@media (min-width:761px){
+  .mobile-drawer, .mobile-drawer-overlay{ display:none !important; }
+}
+</style>
+</head>
+<body>
+
+<!-- ============ LOGIN ============ -->
+<div class="login-screen" id="loginScreen">
+  <button class="icon-btn login-theme" onclick="toggleTheme()" aria-label="Toggle dark mode">
+    <svg id="themeIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="4.5"/><path d="M12 3v2M12 19v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M3 12h2M19 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4"/></svg>
+  </button>
+
+  <div class="login-hero">
+    <div class="login-hero-top">
+      <div class="login-hero-mark">N</div>
+      <div class="login-hero-title">Follow-up that runs on <em>consent</em>, not surveillance.</div>
+      <div class="login-hero-sub">Every list in KingdomLink exists because someone opted in — a group member sharing their check-ins, a visitor asking to be reached, an RSVP freely given. Nothing is ever inferred behind someone's back.</div>
+    </div>
+    <div class="login-hero-panels">
+      <div class="hero-panel p-clay">
+        <span class="hero-panel-tag">Head admin</span>
+        <div class="hero-panel-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l2.4 5.5L20 8.3l-4 4 1 5.7L12 15.5 7 18l1-5.7-4-4 5.6-.8L12 2z"/></svg>
+        </div>
+        <div class="hero-panel-title">I build the ledger</div>
+        <ul>
+          <li>Bootstrap the church's very first account — a one-time setup</li>
+          <li>Promote, demote, suspend, or restore any member</li>
+          <li>Full audit log of every role change, timestamped</li>
+        </ul>
+      </div>
+      <div class="hero-panel p-green">
+        <span class="hero-panel-tag">Leaders &amp; members</span>
+        <div class="hero-panel-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><path d="M17 8h4M19 6v4"/></svg>
+        </div>
+        <div class="hero-panel-title">I work the ledger</div>
+        <ul>
+          <li>A follow-up queue assigned to you, round-robin — never one inbox</li>
+          <li>Only see check-ins a member actually chose to share</li>
+          <li>Leaders flag at 2 absences, with escalation if it goes unresolved</li>
+        </ul>
+      </div>
+    </div>
+    <div class="login-hero-foot">KingdomLink — internal tool, church use only.</div>
+  </div>
+
+  <div class="login-panel">
+    <div class="login-card">
+      <div class="login-brand"><span class="brand-mark">N</span>KingdomLink </div>
+      <div class="login-sub">Church follow-up, worked like a ledger.</div>
+
+      <div class="login-tabs">
+        <div class="login-tab active" id="tabSignIn" onclick="showLoginTab('signin')">Sign in</div>
+        <div class="login-tab" id="tabSetup" onclick="showLoginTab('setup')">First-time setup</div>
+      </div>
+
+      <!-- ---- Sign in ---- -->
+      <div class="login-form active" id="formSignIn">
+        <div class="field">
+          <label for="loginEmail">Email</label>
+          <input type="email" id="loginEmail" autocomplete="username" placeholder="you@church.org">
+        </div>
+        <div class="field">
+          <label for="loginPassword">Password</label>
+          <div class="field-password-wrap">
+            <input type="password" id="loginPassword" autocomplete="current-password" placeholder="••••••••">
+            <button type="button" class="field-password-toggle" onclick="togglePasswordVisibility('loginPassword', this)" aria-label="Show password" tabindex="-1">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z"/><circle cx="12" cy="12" r="3"/></svg>
+            </button>
+          </div>
+        </div>
+        <button class="btn-primary" id="signInBtn" onclick="login()">
+          <span class="spin"></span><span class="btn-label">Sign in</span>
+        </button>
+        <div class="login-err" id="loginErr"></div>
+      </div>
+
+      <!-- ---- First-time setup ---- -->
+      <div class="login-form" id="formSetup">
+        <div class="field-hint" style="margin-bottom:16px;">Creates the very first admin account for a church. Only works once — after this, everyone else is registered from inside the app.</div>
+        <div class="field">
+          <label for="setupChurch">Church name</label>
+          <input type="text" id="setupChurch" placeholder="e.g. Grace Assembly">
+        </div>
+        <div class="field">
+          <label for="setupName">Your full name</label>
+          <input type="text" id="setupName" placeholder="e.g. Michael Anyanwu">
+        </div>
+        <div class="field">
+          <label for="setupEmail">Email</label>
+          <input type="email" id="setupEmail" autocomplete="username" placeholder="you@church.org">
+        </div>
+        <div class="field">
+          <label for="setupPassword">Password</label>
+          <div class="field-password-wrap">
+            <input type="password" id="setupPassword" autocomplete="new-password" placeholder="Choose a password">
+            <button type="button" class="field-password-toggle" onclick="togglePasswordVisibility('setupPassword', this)" aria-label="Show password" tabindex="-1">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z"/><circle cx="12" cy="12" r="3"/></svg>
+            </button>
+          </div>
+        </div>
+        <button class="btn-primary" id="setupBtn" onclick="bootstrapAdmin()">
+          <span class="spin"></span><span class="btn-label">Create admin account</span>
+        </button>
+        <div class="login-err" id="setupErr"></div>
+        <div class="login-ok" id="setupOk"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ APP ============ -->
+<div class="app" id="app">
+  <!-- ===== MOBILE TOP BAR (hidden on desktop) ===== -->
+  <div class="mobile-topbar">
+    <button class="icon-btn" onclick="toggleMobileNav()" aria-label="Open menu">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+    </button>
+    <div class="brand"><span class="brand-mark">N</span> KingdomLink</div>
+  </div>
+  <div class="mobile-drawer-overlay" onclick="closeMobileNav()"></div>
+  <div class="mobile-drawer">
+    <button class="nav-item active" data-page="queue" onclick="showPage('queue')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
+      Follow-up queue
+      <span class="nav-badge" style="display:none;">0</span>
+    </button>
+    <button class="nav-item" data-page="help" onclick="showPage('help')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 015 0c0 1.7-2.5 2-2.5 4M12 17h.01"/></svg>
+      Help &amp; guide
+    </button>
+    <button class="nav-item leader-plus" data-page="birthdays" onclick="showPage('birthdays')" style="display:none;">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 2v6M8 8c0-2 4-2 4-4 0 2 4 2 4 4M4 22V10a2 2 0 012-2h12a2 2 0 012 2v12M4 15h16"/></svg>
+      Birthdays
+    </button>
+    <button class="nav-item" data-page="events" onclick="showPage('events')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>
+      Events
+    </button>
+    <button class="nav-item leader-plus" data-page="members" onclick="showPage('members')" style="display:none;">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><path d="M17 8h4M19 6v4"/></svg>
+      Members
+    </button>
+    <button class="nav-item admin-only" data-page="cells" onclick="showPage('cells')" style="display:none;">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="7" cy="7" r="2.6"/><circle cx="17" cy="7" r="2.6"/><circle cx="12" cy="16" r="2.6"/><path d="M7 9.6V13M17 9.6V13M9.2 17.4L11 16.8M14.8 17.4L13 16.8"/></svg>
+      Cell leaders
+    </button>
+    <button class="nav-item admin-only" data-page="stats" onclick="showPage('stats')" style="display:none;">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 20V10M12 20V4M20 20v-7"/></svg>
+      Statistics
+    </button>
+    <button class="nav-item admin-only" data-page="admin" onclick="showPage('admin')" style="display:none;">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>
+      Admin overview
+    </button>
+    <button class="nav-item admin-only" data-page="leaders" onclick="showPage('leaders')" style="display:none;">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="8" r="3.5"/><path d="M4 20c0-4 4-6 8-6s8 2 8 6"/></svg>
+      Leader accountability
+    </button>
+    <button class="nav-item head-admin-only" data-page="rolemgmt" onclick="showPage('rolemgmt')" style="display:none;">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 2l2.4 5.5L20 8.3l-4 4 1 5.7L12 15.5 7 18l1-5.7-4-4 5.6-.8L12 2z"/></svg>
+      Role management
+    </button>
+    <button class="nav-item head-admin-only" data-page="auditlog" onclick="showPage('auditlog')" style="display:none;">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M9 2h6l5 5v13a2 2 0 01-2 2H9a2 2 0 01-2-2V4a2 2 0 012-2z"/><path d="M9 11h6M9 15h6M9 7h2"/></svg>
+      Audit log
+    </button>
+    <div class="sidebar-foot">
+      <div class="who"><b id="whoNameMobile">—</b><span id="whoRoleMobile">—</span></div>
+      <div style="display:flex; gap:6px;">
+        <button class="icon-btn" onclick="toggleTheme()" aria-label="Toggle dark mode">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="4.5"/><path d="M12 3v2M12 19v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M3 12h2M19 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4"/></svg>
+        </button>
+        <button class="icon-btn" onclick="logout()" aria-label="Sign out">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="sidebar">
+    <div class="brand"><span class="brand-mark">N</span> KingdomLink</div>
+
+    <button class="nav-item active" data-page="queue" onclick="showPage('queue')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
+      Follow-up queue
+      <span class="nav-badge" id="queueBadge" style="display:none;">0</span>
+    </button>
+    <button class="nav-item" data-page="help" onclick="showPage('help')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 015 0c0 1.7-2.5 2-2.5 4M12 17h.01"/></svg>
+      Help &amp; guide
+    </button>
+    <button class="nav-item leader-plus" data-page="birthdays" onclick="showPage('birthdays')" style="display:none;">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 2v6M8 8c0-2 4-2 4-4 0 2 4 2 4 4M4 22V10a2 2 0 012-2h12a2 2 0 012 2v12M4 15h16"/></svg>
+      Birthdays
+    </button>
+    <button class="nav-item" data-page="events" onclick="showPage('events')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>
+      Events
+    </button>
+    <button class="nav-item leader-plus" data-page="members" onclick="showPage('members')" style="display:none;">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><path d="M17 8h4M19 6v4"/></svg>
+      Members
+    </button>
+    <button class="nav-item admin-only" data-page="cells" onclick="showPage('cells')" style="display:none;">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="7" cy="7" r="2.6"/><circle cx="17" cy="7" r="2.6"/><circle cx="12" cy="16" r="2.6"/><path d="M7 9.6V13M17 9.6V13M9.2 17.4L11 16.8M14.8 17.4L13 16.8"/></svg>
+      Cell leaders
+    </button>
+    <button class="nav-item admin-only" data-page="stats" onclick="showPage('stats')" style="display:none;">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 20V10M12 20V4M20 20v-7"/></svg>
+      Statistics
+    </button>
+    <button class="nav-item admin-only" data-page="admin" onclick="showPage('admin')" style="display:none;">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>
+      Admin overview
+    </button>
+    <button class="nav-item admin-only" data-page="leaders" onclick="showPage('leaders')" style="display:none;">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="8" r="3.5"/><path d="M4 20c0-4 4-6 8-6s8 2 8 6"/></svg>
+      Leader accountability
+    </button>
+    <button class="nav-item head-admin-only" data-page="rolemgmt" onclick="showPage('rolemgmt')" style="display:none;">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 2l2.4 5.5L20 8.3l-4 4 1 5.7L12 15.5 7 18l1-5.7-4-4 5.6-.8L12 2z"/></svg>
+      Role management
+    </button>
+    <button class="nav-item head-admin-only" data-page="auditlog" onclick="showPage('auditlog')" style="display:none;">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M9 2h6l5 5v13a2 2 0 01-2 2H9a2 2 0 01-2-2V4a2 2 0 012-2z"/><path d="M9 11h6M9 15h6M9 7h2"/></svg>
+      Audit log
+    </button>
+
+    <div class="sidebar-foot">
+      <div class="who"><b id="whoName">—</b><span id="whoRole">—</span></div>
+      <div style="display:flex; gap:6px;">
+        <button class="icon-btn" onclick="toggleTheme()" aria-label="Toggle dark mode">
+          <svg id="themeIconApp" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="4.5"/><path d="M12 3v2M12 19v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M3 12h2M19 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4"/></svg>
+        </button>
+        <button class="icon-btn" onclick="logout()" aria-label="Sign out">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="main">
+
+    <!-- ---- Follow-up queue ---- -->
+    <div class="page active" id="page-queue">
+      <div class="page-head">
+        <div>
+          <div class="page-title">Follow-up queue</div>
+          <div class="page-sub" id="queueSub">Absent members assigned to you. Complete each with a real outcome, not just "called."</div>
+        </div>
+        <div class="page-head-actions" style="display:flex; gap:8px; align-items:center;">
+          <button class="btn-small leader-plus" id="addVisitorBtn" onclick="openAddVisitorModal()" style="display:none; width:auto;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 5v14M5 12h14"/></svg>
+            Add visitor
+          </button>
+          <select class="member-search" id="queueRoleFilter" onchange="loadQueue()" style="min-width:150px;">
+            <option value="">All roles</option>
+            <option value="adult">Adults only</option>
+            <option value="teen">Teens only</option>
+          </select>
+        </div>
+      </div>
+      <div class="ledger" id="queueLedger"></div>
+    </div>
+
+    <!-- ---- Birthdays ---- -->
+    <div class="page" id="page-birthdays">
+      <div class="page-head">
+        <div>
+          <div class="page-title">Upcoming birthdays</div>
+          <div class="page-sub">Next 7 days — a reason to call that isn't about an absence.</div>
+        </div>
+      </div>
+      <div id="bdayList"></div>
+    </div>
+
+    <!-- ---- Events ---- -->
+    <div class="page" id="page-events">
+      <div class="page-head">
+        <div>
+          <div class="page-title">Events</div>
+          <div class="page-sub">Upcoming and past, church-wide.</div>
+        </div>
+        <div class="page-head-actions">
+          <select class="member-search" id="eventsViewToggle" onchange="renderEvents()" style="min-width:110px;">
+            <option value="list">List view</option>
+            <option value="calendar">Calendar</option>
+          </select>
+          <button class="btn-small admin-only" id="newEventBtn" onclick="openCreateEventModal()" style="display:none;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 5v14M5 12h14"/></svg>
+            New event
+          </button>
+        </div>
+      </div>
+      <div id="eventsListView">
+        <div class="section-label">Upcoming</div>
+        <div class="leader-grid" id="eventsUpcoming"></div>
+        <div class="section-label">Past</div>
+        <div class="leader-grid" id="eventsPast"></div>
+      </div>
+      <div id="eventsCalendarView" style="display:none;"></div>
+    </div>
+
+    <!-- ---- Members ---- -->
+    <div class="page" id="page-members">
+      <div class="page-head">
+        <div>
+          <div class="page-title">Members</div>
+          <div class="page-sub">Everyone on the roster, grouped by role.</div>
+        </div>
+        <div class="page-head-actions">
+          <input class="member-search" id="memberSearch" type="text" placeholder="Search by name…" oninput="renderMemberGroups()">
+          <button class="btn-small" id="scanDuplicatesBtn" onclick="scanRosterForDuplicates()" style="display:none;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            Check for duplicates
+          </button>
+          <button class="btn-small leader-plus" id="registerBtn" onclick="openRegisterModal()" style="display:none;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 5v14M5 12h14"/></svg>
+            Register member
+          </button>
+        </div>
+      </div>
+      <div id="rosterDuplicatesPanel" style="display:none; margin-bottom:16px;"></div>
+      <div id="memberGroups"></div>
+    </div>
+
+    <!-- ---- Cell leaders ---- -->
+    <div class="page" id="page-cells">
+      <div class="page-head">
+        <div>
+          <div class="page-title">Cell leaders</div>
+          <div class="page-sub" id="cellsSub">Every cell group and who leads it.</div>
+        </div>
+        <button class="btn-small leader-plus" onclick="openCreateCellModal()">+ New cell</button>
+      </div>
+      <div class="leader-grid" id="cellsGrid"></div>
+      <div class="admin-only" style="display:none;">
+        <div class="section-label">Attendance trend by cell</div>
+        <div id="cellsAttendanceTrend"></div>
+      </div>
+    </div>
+
+    <!-- ---- Statistics ---- -->
+    <div class="page" id="page-stats">
+      <div class="page-head">
+        <div>
+          <div class="page-title">Statistics</div>
+          <div class="page-sub" id="statsSub">Church-wide numbers, aggregate only.</div>
+        </div>
+        <div class="page-head-actions">
+          <select class="member-search" id="statsRangeSelect" onchange="loadStatistics()" style="min-width:150px;">
+            <option value="12">Last 12 services</option>
+            <option value="6m">Last 6 months</option>
+            <option value="1y">Last year</option>
+            <option value="2y">Last 2 years</option>
+            <option value="all">All time</option>
+          </select>
+          <select class="member-search" id="statsChartType" onchange="renderStatsTrend()" style="min-width:110px;">
+            <option value="bar">Bar chart</option>
+            <option value="line">Line chart</option>
+          </select>
+        </div>
+      </div>
+      <div class="stat-row" id="statsCards"></div>
+      <div class="section-label">Attendance trend</div>
+      <div id="statsTrend"></div>
+    </div>
+
+    <!-- ---- Admin overview ---- -->
+    <div class="page" id="page-admin">
+      <div class="page-head">
+        <div>
+          <div class="page-title">Admin overview</div>
+          <div class="page-sub" id="adminSub">This week's follow-up completion.</div>
+        </div>
+      </div>
+      <div class="stat-row" id="adminStats"></div>
+      <div class="section-label">All pending, church-wide</div>
+      <div class="ledger" id="adminLedger"></div>
+    </div>
+
+    <!-- ---- Leader accountability ---- -->
+    <div class="page" id="page-leaders">
+      <div class="page-head">
+        <div>
+          <div class="page-title">Leader accountability</div>
+          <div class="page-sub">Leaders flag earlier than members — 2 consecutive absences, not 3.</div>
+        </div>
+      </div>
+      <div class="leader-grid" id="leaderLedger"></div>
+    </div>
+
+    <div class="page" id="page-rolemgmt">
+      <div class="page-head">
+        <div>
+          <div class="page-title">Role management</div>
+          <div class="page-sub">Promote to admin, demote, suspend, or restore. Head Admin only.</div>
+        </div>
+        <input class="member-search" id="roleMgmtSearch" type="text" placeholder="Search by name…" oninput="renderRoleMgmtRows()">
+      </div>
+      <div id="roleMgmtRows"></div>
+    </div>
+
+    <div class="page" id="page-auditlog">
+      <div class="page-head">
+        <div>
+          <div class="page-title">Audit log</div>
+          <div class="page-sub">Every promotion, demotion, suspension, and restore — most recent first.</div>
+        </div>
+      </div>
+      <div id="auditLogRows"></div>
+    </div>
+
+    <!-- ---- Help & guide ---- -->
+    <div class="page" id="page-help">
+      <div class="page-head">
+        <div>
+          <div class="page-title">Help &amp; guide</div>
+          <div class="page-sub">New here? Start at the top and work down — each section only covers what your role can actually do.</div>
+        </div>
+      </div>
+
+      <div class="help-section">
+        <div class="help-heading">Getting started</div>
+        <div class="help-body">
+          <p><b>KingdomLink</b> is your church's roster and attendance tracker. Everyone signs in with an email and password set for them when they were registered — if you don't have one yet, ask whoever manages members at your church to register you (see <b>Members</b> below).</p>
+          <p>The sidebar on the left is how you get around. What you see there depends on your role — a regular member sees fewer pages than a leader, and a leader sees fewer than an admin. That's intentional: everyone only sees what they need for their own part.</p>
+        </div>
+      </div>
+
+      <div class="help-section">
+        <div class="help-heading">Follow-up queue</div>
+        <div class="help-body">
+          <p>This is your home page. If you're a leader or admin, it shows people assigned to you to check on — usually because they missed a service. Open a person, make contact, and record what happened (reached them, no answer, wrong number). That closes the item.</p>
+          <p class="leader-plus" style="display:none;">If you can register members, you'll also see a <b>Visitors</b> filter here — people who visited and asked to be followed up with. You can add a new visitor directly from that view.</p>
+        </div>
+      </div>
+
+      <div class="help-section">
+        <div class="help-heading">Events</div>
+        <div class="help-body">
+          <p><b>Events</b> lists everything scheduled, upcoming and past. If you're a leader or admin, you can create a new event and mark attendance for it once it's happened — open the event and use <b>Take attendance</b> to mark each person present or absent.</p>
+        </div>
+      </div>
+
+      <div class="help-section leader-plus" style="display:none;">
+        <div class="help-heading">Birthdays</div>
+        <div class="help-body">
+          <p>Shows which members have a birthday coming up in the next 7 days, with their phone number, so you can reach out. Visible to leaders and admins only.</p>
+        </div>
+      </div>
+
+      <div class="help-section leader-plus" style="display:none;">
+        <div class="help-heading">Members</div>
+        <div class="help-body">
+          <p>This is the full roster, grouped by role. Use <b>Register member</b> to add someone new — you'll need at least their name and role. If you're registering a child, you'll also pick a guardian from the existing adults.</p>
+          <p>Click anyone's name to open their details. From there you can:</p>
+          <ul>
+            <li><b>Edit details</b> — fix a typo in their name, phone, email, area, or date of birth.</li>
+            <li><b>Move to cell</b> — move them into a different cell group, or take them out of one entirely.</li>
+          </ul>
+          <p>Suspended members are hidden from this list on purpose, so the day-to-day roster only shows people who are actually active.</p>
+        </div>
+      </div>
+
+      <div class="help-section admin-only" style="display:none;">
+        <div class="help-heading">Cell leaders</div>
+        <div class="help-body">
+          <p>This page lists every cell group. <b>New cell</b> creates one and picks its first leader in the same step. To change who leads a cell later, use the <b>Change leader</b> picker directly on that cell's card — this only changes who's leading, it does not change that person's role.</p>
+        </div>
+      </div>
+
+      <div class="help-section admin-only" style="display:none;">
+        <div class="help-heading">Statistics &amp; Admin overview</div>
+        <div class="help-body">
+          <p><b>Statistics</b> shows attendance trends over time, plus how many visitors have come through and how many have become members. <b>Admin overview</b> is a snapshot of the most recent service — who's assigned to follow up on whom, and how that's progressing.</p>
+        </div>
+      </div>
+
+      <div class="help-section admin-only" style="display:none;">
+        <div class="help-heading">Leader accountability</div>
+        <div class="help-body">
+          <p>Leaders are tracked the same way regular members are — if a leader misses services, they're flagged here too. If a leader stays unresolved past your church's configured window, it automatically escalates to senior leadership.</p>
+        </div>
+      </div>
+
+      <div class="help-section head-admin-only" style="display:none;">
+        <div class="help-heading">Role management &amp; Audit log</div>
+        <div class="help-body">
+          <p>Only visible to the Head Admin — the account your church was first set up with. <b>Role management</b> is where you promote someone to admin, demote an admin, or suspend and restore anyone's access. The Head Admin's own role and status can never be changed by anyone, including themselves — that protection is permanent.</p>
+          <p><b>Audit log</b> is a complete record of every one of those actions: who did what, to whom, and when. Nothing here can be edited or deleted.</p>
+        </div>
+      </div>
+
+      <div class="help-section">
+        <div class="help-heading">Good to know</div>
+        <div class="help-body">
+          <p>Anything you see on your own record — your own check-ins, your own RSVPs — is always visible to you. What a leader or admin sees about you is more limited by design: things like attendance counts are usually aggregate numbers, not per-person lists, unless you've specifically opted in to sharing them.</p>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ============ REGISTER MEMBER MODAL ============ -->
+<div class="modal-overlay" id="registerModal">
+  <div class="modal-box">
+    <div class="modal-head">
+      <div>
+        <div class="modal-title">Register a member</div>
+        <div class="modal-sub">Added to this church's roster right away.</div>
+      </div>
+      <button class="modal-close" onclick="closeRegisterModal()" aria-label="Close">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M18 6L6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+
+    <div class="field">
+      <label>Full name</label>
+      <input type="text" id="regFullName" placeholder="e.g. Chidinma Okafor" oninput="onRegDuplicateCheckInput()">
+    </div>
+
+    <div id="regDuplicateWarning" style="display:none; margin-bottom:14px;"></div>
+
+    <div class="field-row">
+      <div class="field">
+        <label>Role</label>
+        <select id="regRole" onchange="onRegRoleChange()">
+          <option value="adult">Adult</option>
+          <option value="child">Child</option>
+          <option value="leader">Leader</option>
+          <option value="admin">Admin</option>
+          <option value="teen">Teenagers</option>
+        </select>
+        <div class="field-hint">Not sure if adult, teen, or child? Pick Adult — you can reclassify them from their profile once you know.</div>
+      </div>
+      <div class="field">
+        <label>Date of birth</label>
+        <input type="date" id="regDob" oninput="onRegDuplicateCheckInput()">
+        <label style="display:flex; align-items:center; gap:6px; margin-top:6px; font-size:12px; color:var(--slate); font-weight:400; cursor:pointer;">
+          <input type="checkbox" id="regDobYearUnknown" onchange="onRegDobYearUnknownChange()" style="width:auto; margin:0;">
+          Don't know the year — just the birthday
+        </label>
+      </div>
+    </div>
+
+    <div class="field-row" id="regDobMonthDayRow" style="display:none;">
+      <div class="field">
+        <label>Birthday (month and day only)</label>
+        <input type="text" id="regDobMonthDay" placeholder="MM-DD, e.g. 07-14" oninput="onRegDuplicateCheckInput()">
+        <div class="field-hint">Used for birthday reminders — the year stays blank on their record.</div>
+      </div>
+    </div>
+
+    <div class="field" id="regGuardianField" style="display:none;">
+      <label>Guardian</label>
+      <select id="regGuardianId"></select>
+      <div class="field-hint">Required for children — no independent accounts.</div>
+    </div>
+
+    <div class="field-row">
+      <div class="field">
+        <label>Phone</label>
+        <input type="tel" id="regPhone" placeholder="080…" oninput="onRegDuplicateCheckInput()">
+      </div>
+      <div class="field">
+        <label>Area</label>
+        <input type="text" id="regArea" placeholder="Neighborhood or zone">
+      </div>
+    </div>
+
+    <div class="field-row">
+      <div class="field">
+        <label>Email</label>
+        <input type="email" id="regEmail" placeholder="Optional for adult/child">
+      </div>
+      <div class="field">
+        <label>Cell group</label>
+        <select id="regCellId"><option value="">Unassigned</option></select>
+      </div>
+    </div>
+
+    <div class="field" id="regPasswordField">
+      <label>Password</label>
+      <div class="field-password-wrap">
+        <input type="password" id="regPassword" placeholder="Only needed if they'll sign in" autocomplete="new-password">
+        <button type="button" class="field-password-toggle" onclick="togglePasswordVisibility('regPassword', this)" aria-label="Show password" tabindex="-1">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z"/><circle cx="12" cy="12" r="3"/></svg>
+        </button>
+      </div>
+      <div class="field-hint">Leave blank for a child, or anyone who won't log in themselves.</div>
+    </div>
+
+    <div class="field-err" id="regErr"></div>
+
+    <div class="modal-actions">
+      <button class="btn-ghost" onclick="closeRegisterModal()">Cancel</button>
+      <button class="btn-primary" id="regSubmitBtn" onclick="submitRegisterMember()">Register member</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ CREATE CELL MODAL ============ -->
+<div class="modal-overlay" id="createCellModal">
+  <div class="modal-box">
+    <div class="modal-head">
+      <div>
+        <div class="modal-title">Promote to cell leader</div>
+        <div class="modal-sub">Creates their cell and updates their role in one step.</div>
+      </div>
+      <button class="modal-close" onclick="closeCreateCellModal()" aria-label="Close">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M18 6L6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+
+    <div class="field">
+      <label>Member to promote</label>
+      <select id="cellLeaderId"></select>
+      <div class="field-hint">Only adults, leaders, and admins can lead a cell.</div>
+    </div>
+
+    <div class="field-row">
+      <div class="field">
+        <label>Cell name</label>
+        <input type="text" id="cellName" placeholder="e.g. Chidi's Cell">
+      </div>
+      <div class="field">
+        <label>Meeting day</label>
+        <select id="cellMeetingDay">
+          <option value="">Not set</option>
+          <option value="Monday">Monday</option>
+          <option value="Tuesday">Tuesday</option>
+          <option value="Wednesday">Wednesday</option>
+          <option value="Thursday">Thursday</option>
+          <option value="Friday">Friday</option>
+          <option value="Saturday">Saturday</option>
+          <option value="Sunday">Sunday</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="field-err" id="cellErr"></div>
+
+    <div class="modal-actions">
+      <button class="btn-ghost" onclick="closeCreateCellModal()">Cancel</button>
+      <button class="btn-primary" id="cellSubmitBtn" onclick="submitCreateCell()">Create cell</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ CREATE EVENT MODAL ============ -->
+<div class="modal-overlay" id="createEventModal">
+  <div class="modal-box">
+    <div class="modal-head">
+      <div>
+        <div class="modal-title">New event</div>
+        <div class="modal-sub">Visible to the roles you choose below.</div>
+      </div>
+      <button class="modal-close" onclick="closeCreateEventModal()" aria-label="Close">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M18 6L6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+
+    <div class="field">
+      <label>Event name</label>
+      <input type="text" id="evName" placeholder="e.g. Youth Convention 2026">
+    </div>
+
+    <div class="field">
+      <label>Category</label>
+      <select id="evCategory"></select>
+    </div>
+
+    <div class="field-row">
+      <div class="field">
+        <label>Date</label>
+        <input type="date" id="evDate">
+      </div>
+      <div class="field">
+        <label>Venue</label>
+        <input type="text" id="evVenue" placeholder="e.g. Main Auditorium">
+      </div>
+    </div>
+
+    <div class="field-row">
+      <div class="field">
+        <label>Start time</label>
+        <input type="time" id="evStartTime">
+      </div>
+      <div class="field">
+        <label>End time</label>
+        <input type="time" id="evEndTime">
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Description</label>
+      <input type="text" id="evDescription" placeholder="Optional">
+    </div>
+
+    <div class="field">
+      <label>Visible to</label>
+      <select id="evVisibility">
+        <option value="public">Everyone</option>
+        <option value="leaders">Leaders and admins</option>
+        <option value="admins">Admins only</option>
+      </select>
+    </div>
+
+    <div class="field-err" id="evErr"></div>
+
+    <div class="modal-actions">
+      <button class="btn-ghost" onclick="closeCreateEventModal()">Cancel</button>
+      <button class="btn-primary" id="evSubmitBtn" onclick="submitCreateEvent()">Create event</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ ADD VISITOR MODAL ============ -->
+<div class="modal-overlay" id="addVisitorModal">
+  <div class="modal-box">
+    <div class="modal-head">
+      <div class="modal-title">Add visitor</div>
+      <button class="modal-close" onclick="closeAddVisitorModal()" aria-label="Close">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M18 6L6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+
+    <div class="field">
+      <label>Full name</label>
+      <input type="text" id="visName" placeholder="Full name">
+    </div>
+    <div class="field">
+      <label>Phone</label>
+      <input type="text" id="visPhone" placeholder="Phone (optional)">
+    </div>
+    <div class="field">
+      <label>Email</label>
+      <input type="email" id="visEmail" placeholder="Email (optional)">
+    </div>
+
+    <div class="field" style="display:flex; align-items:center; gap:8px;">
+      <input type="checkbox" id="visWantsFollowUp" checked style="width:auto;">
+      <label for="visWantsFollowUp" style="margin:0;">Visitor wants to be contacted for follow-up</label>
+    </div>
+
+    <div class="field-err" id="visErr"></div>
+
+    <div class="modal-actions">
+      <button class="btn-ghost" onclick="closeAddVisitorModal()">Cancel</button>
+      <button class="btn-primary" id="visSubmitBtn" onclick="submitAddVisitor()">Add visitor</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ TAKE ATTENDANCE MODAL ============ -->
+<div class="modal-overlay" id="attendanceModal">
+  <div class="modal-box" style="max-width:560px;">
+    <div class="modal-head">
+      <div>
+        <div class="modal-title">Take attendance</div>
+        <div class="modal-sub" id="attEventLabel"></div>
+      </div>
+      <button class="modal-close" onclick="closeAttendanceModal()" aria-label="Close">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M18 6L6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+
+    <input class="member-search att-search" id="attSearch" type="text" placeholder="Search by name…" oninput="renderAttendanceRows()">
+
+    <div class="att-summary" id="attSummary"></div>
+
+    <div id="attRows" style="max-height:340px; overflow-y:auto;"></div>
+
+    <div class="field-err" id="attErr"></div>
+
+    <div class="modal-actions">
+      <button class="btn-ghost" onclick="closeAttendanceModal()">Cancel</button>
+      <button class="btn-primary" id="attSubmitBtn" onclick="submitAttendance()">Save attendance</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ MEMBER DETAIL MODAL ============ -->
+<div class="modal-overlay" id="memberDetailModal">
+  <div class="modal-box">
+    <div class="modal-head">
+      <div>
+        <div class="modal-title" id="detailName">—</div>
+        <div class="modal-sub" id="detailRole">—</div>
+      </div>
+      <button class="modal-close" onclick="closeMemberDetail()" aria-label="Close">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M18 6L6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div id="detailBody"></div>
+  </div>
+</div>
+
+<script>
+/* ================= State ================= */
+const API = '/api';
+let TOKEN = localStorage.getItem('neomap_token') || null;
+let ME = null;
+
+function authHeaders(){
+  return TOKEN ? { 'Authorization': 'Bearer ' + TOKEN, 'Content-Type': 'application/json' }
+                : { 'Content-Type': 'application/json' };
+}
+
+async function api(path, opts={}){
+  const res = await fetch(API + path, { ...opts, headers: { ...authHeaders(), ...(opts.headers||{}) } });
+  if(res.status === 401){ logout(); throw new Error('Unauthorized'); }
+  const data = await res.json().catch(()=>({}));
+  if(!res.ok) throw new Error(data.error || ('Request failed: ' + res.status));
+  return data;
+}
+
+/* ================= Auth ================= */
+function showLoginTab(which){
+  const isSignIn = which === 'signin';
+  document.getElementById('tabSignIn').classList.toggle('active', isSignIn);
+  document.getElementById('tabSetup').classList.toggle('active', !isSignIn);
+  document.getElementById('formSignIn').classList.toggle('active', isSignIn);
+  document.getElementById('formSetup').classList.toggle('active', !isSignIn);
+  document.getElementById('loginErr').textContent = '';
+  document.getElementById('setupErr').textContent = '';
+  document.getElementById('setupOk').textContent = '';
+}
+
+function errIcon(msg){
+  return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/></svg><span>'+msg+'</span>';
+}
+function okIcon(msg){
+  return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg><span>'+msg+'</span>';
+}
+
+function setBtnLoading(btn, isLoading){
+  btn.classList.toggle('loading', isLoading);
+  btn.disabled = isLoading;
+}
+
+// Shared by loginPassword, setupPassword, and regPassword. Swaps the
+// input's type between password/text and swaps the icon between eye
+// and eye-off so the button's own state always matches what the field
+// is currently doing, rather than tracking a separate boolean per field.
+const EYE_OPEN_SVG = '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z"/><circle cx="12" cy="12" r="3"/>';
+const EYE_OFF_SVG = '<path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a20.3 20.3 0 0 1 5.06-5.94M9.9 4.24A10.94 10.94 0 0 1 12 4c7 0 11 8 11 8a20.3 20.3 0 0 1-3.22 4.42M14.12 14.12a3 3 0 1 1-4.24-4.24"/><path d="M1 1l22 22"/>';
+
+function togglePasswordVisibility(inputId, btn){
+  const input = document.getElementById(inputId);
+  if(!input) return;
+  const showing = input.type === 'text';
+  input.type = showing ? 'password' : 'text';
+  btn.setAttribute('aria-label', showing ? 'Show password' : 'Hide password');
+  btn.querySelector('svg').innerHTML = showing ? EYE_OPEN_SVG : EYE_OFF_SVG;
+}
+
+async function login(){
+  const email = document.getElementById('loginEmail').value.trim();
+  const password = document.getElementById('loginPassword').value;
+  const errEl = document.getElementById('loginErr');
+  const btn = document.getElementById('signInBtn');
+  errEl.innerHTML = '';
+  if(!email || !password){ errEl.innerHTML = errIcon('Enter your email and password.'); return; }
+
+  setBtnLoading(btn, true);
+  try{
+    const data = await api('/auth/login', { method:'POST', body: JSON.stringify({ email, password }) });
+    TOKEN = data.token;
+    ME = data.member;
+    localStorage.setItem('neomap_token', TOKEN);
+    enterApp();
+  }catch(e){
+    errEl.innerHTML = errIcon('Could not sign in — check your email and password, or use "First-time setup" if this church has no account yet.');
+  }finally{
+    setBtnLoading(btn, false);
+  }
+}
+
+async function bootstrapAdmin(){
+  const church_name = document.getElementById('setupChurch').value.trim();
+  const full_name = document.getElementById('setupName').value.trim();
+  const email = document.getElementById('setupEmail').value.trim();
+  const password = document.getElementById('setupPassword').value;
+  const errEl = document.getElementById('setupErr');
+  const okEl = document.getElementById('setupOk');
+  const btn = document.getElementById('setupBtn');
+  errEl.innerHTML = ''; okEl.textContent = '';
+
+  if(!church_name || !full_name || !email || !password){
+    errEl.innerHTML = errIcon('Fill in every field to create the admin account.');
+    return;
+  }
+
+  setBtnLoading(btn, true);
+  try{
+    const data = await api('/auth/bootstrap', {
+      method:'POST',
+      body: JSON.stringify({ church_name, full_name, email, password })
+    });
+    TOKEN = data.token;
+    ME = data.member;
+    localStorage.setItem('neomap_token', TOKEN);
+    okEl.innerHTML = okIcon('Admin account created — signing you in…');
+    setTimeout(enterApp, 500);
+  }catch(e){
+    errEl.innerHTML = errIcon(e.message || 'Could not create the account.');
+  }finally{
+    setBtnLoading(btn, false);
+  }
+}
+
+function logout(){
+  TOKEN = null; ME = null;
+  localStorage.removeItem('neomap_token');
+  document.getElementById('app').classList.remove('active');
+  document.getElementById('loginScreen').style.display = 'flex';
+  document.getElementById('loginEmail').value = '';
+  document.getElementById('loginPassword').value = '';
+}
+
+function enterApp(){
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('app').classList.add('active');
+  document.getElementById('whoName').textContent = ME.full_name;
+  document.getElementById('whoRole').textContent = ME.role.charAt(0).toUpperCase() + ME.role.slice(1);
+  document.getElementById('whoNameMobile').textContent = ME.full_name;
+  document.getElementById('whoRoleMobile').textContent = ME.role.charAt(0).toUpperCase() + ME.role.slice(1);
+
+  const isAdmin = ME.role === 'admin';
+  const canManageMembers = ME.role === 'admin' || ME.role === 'leader';
+  const isHeadAdmin = !!ME.is_head_admin;
+  document.querySelectorAll('.admin-only').forEach(el => el.style.display = isAdmin ? 'flex' : 'none');
+  document.querySelectorAll('.leader-plus').forEach(el => el.style.display = canManageMembers ? 'flex' : 'none');
+  document.querySelectorAll('.head-admin-only').forEach(el => el.style.display = isHeadAdmin ? 'flex' : 'none');
+
+  // Visitor follow-up is admin/leader only on the backend (see
+  // /api/follow-up/visitors) -- only offer the option to roles that
+  // can actually use it, rather than showing a choice that 403s.
+  if(canManageMembers){
+    const roleFilterSelect = document.getElementById('queueRoleFilter');
+    if(roleFilterSelect && !roleFilterSelect.querySelector('option[value="visitors"]')){
+      const opt = document.createElement('option');
+      opt.value = 'visitors';
+      opt.textContent = 'Visitors wanting follow-up';
+      roleFilterSelect.appendChild(opt);
+    }
+  }
+
+  loadQueue();
+  loadEvents();
+  if(canManageMembers){ loadMembers(); loadBirthdays(); }
+  if(isAdmin){ loadAdminOverview(); loadLeaderAccountability(); loadCells(); loadStatistics(); loadCellAttendanceTrend(); }
+  if(isHeadAdmin){ loadRoleMgmt(); loadAuditLog(); }
+
+  // computeEventPhase() depends on the current clock time, not just on
+  // data from the server -- an event sitting in "upcoming" needs to
+  // flip to "ongoing" and then to "needs attendance" as real time
+  // passes, even if nobody touches anything else on the page in the
+  // meantime. Re-render (not re-fetch -- no need to hit the API just
+  // to recompute a phase against data already in ALL_EVENTS) once a
+  // minute. Only one interval ever runs even across repeated logins.
+  if(!window.__eventsPhaseInterval){
+    window.__eventsPhaseInterval = setInterval(() => {
+      if(document.getElementById('eventsListView') && ALL_EVENTS.length){
+        renderEvents();
+      }
+    }, 60000);
+  }
+}
+
+/* ================= Nav ================= */
+function showPage(name){
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('page-' + name).classList.add('active');
+  document.querySelectorAll('.nav-item[data-page="' + name + '"]').forEach(n => n.classList.add('active'));
+  closeMobileNav();
+}
+
+function toggleMobileNav(){
+  document.querySelector('.mobile-drawer').classList.toggle('open');
+  document.querySelector('.mobile-drawer-overlay').classList.toggle('open');
+}
+function closeMobileNav(){
+  document.querySelector('.mobile-drawer').classList.remove('open');
+  document.querySelector('.mobile-drawer-overlay').classList.remove('open');
+}
+
+/* ================= Follow-up queue ================= */
+const OUTCOME_LABELS = {
+  reached_ok: 'Reached — all good',
+  reached_concern: 'Reached — needs follow-up',
+  no_answer: 'No answer',
+  invalid_number: 'Number invalid',
+};
+
+async function loadQueue(){
+  const ledger = document.getElementById('queueLedger');
+  const roleFilter = document.getElementById('queueRoleFilter').value;
+  const subEl = document.getElementById('queueSub');
+
+  // Only relevant on the visitors view -- and only leader_plus roles
+  // ever see this filter option in the first place (see enterApp's
+  // canManageMembers gate on the 'visitors' <option> itself).
+  const addVisitorBtn = document.getElementById('addVisitorBtn');
+  if(addVisitorBtn) addVisitorBtn.style.display = (roleFilter === 'visitors') ? 'flex' : 'none';
+
+  if(roleFilter === 'visitors'){
+    subEl.textContent = 'Visitors who asked to be contacted and haven\'t been reached yet.';
+    // Convert-to-member needs ALL_MEMBERS for its picker. loadMembers()
+    // already runs on login for anyone who can reach this filter (see
+    // canManageMembers gate above), but if it hasn't resolved yet,
+    // kick it off now so the picker isn't stuck empty.
+    if(ALL_MEMBERS.length === 0){ loadMembers(); }
+    try{
+      const visitors = await api('/follow-up/visitors');
+      renderQueueBadge(visitors.length);
+      if(visitors.length === 0){
+        ledger.innerHTML = emptyState('No visitors waiting', 'Every visitor who wants follow-up has been reached.');
+        return;
+      }
+      ledger.innerHTML = visitors.map(rowForVisitor).join('');
+    }catch(e){
+      ledger.innerHTML = emptyState('Could not load visitors', e.message);
+    }
+    return;
+  }
+
+  subEl.textContent = 'Absent members assigned to you. Complete each with a real outcome, not just "called."';
+  try{
+    const qs = roleFilter ? ('?role=' + encodeURIComponent(roleFilter)) : '';
+    const items = await api('/follow-up/queue' + qs);
+    renderQueueBadge(items.length);
+    if(items.length === 0){
+      ledger.innerHTML = emptyState('Queue is clear', 'Nobody assigned to you is waiting on a call right now.');
+      return;
+    }
+    ledger.innerHTML = items.map(rowForAssignment).join('');
+  }catch(e){
+    ledger.innerHTML = emptyState('Could not load the queue', e.message);
+  }
+}
+
+function renderQueueBadge(n){
+  const badge = document.getElementById('queueBadge');
+  if(n > 0){ badge.style.display='flex'; badge.textContent = n; } else { badge.style.display='none'; }
+}
+
+function rowForAssignment(a){
+  const rec = a.attendance_record || {};
+  const escalatedClass = a.reason && a.reason.includes('escalation') ? ' escalated' : '';
+  const flag = a.reason && a.reason.includes('escalation')
+    ? '<span class="led-flag">· ' + (rec.consecutive_absences || 0) + ' in a row</span>' : '';
+  const rolePill = rec.member_role ? `<span class="pill role-${rec.member_role}">${rec.member_role.charAt(0).toUpperCase() + rec.member_role.slice(1)}</span>` : '';
+  return `
+    <div class="ledger-row${escalatedClass}" id="row-${a.id}">
+      <div>
+        <div class="led-name">${escapeHtml(rec.member_name || 'Unknown')} ${rolePill}</div>
+        <div class="led-meta">${escapeHtml(rec.cell_name || 'Unassigned')} ${flag}</div>
+      </div>
+      <div class="led-phone mono">${escapeHtml(rec.member_phone || '—')}</div>
+      <div class="led-status status-pending">Pending</div>
+      <div class="led-action">
+        <select id="outcome-${a.id}">
+          <option value="">Outcome…</option>
+          ${Object.entries(OUTCOME_LABELS).map(([v,l]) => `<option value="${v}">${l}</option>`).join('')}
+        </select>
+        <button onclick="completeAssignment(${a.id})">Mark done</button>
+      </div>
+      <div class="led-note">
+        <textarea id="note-${a.id}" placeholder="What happened on the call…"></textarea>
+      </div>
+    </div>`;
+}
+
+async function completeAssignment(id){
+  const outcome = document.getElementById('outcome-' + id).value;
+  const note = document.getElementById('note-' + id).value.trim();
+  if(!outcome){ document.getElementById('outcome-' + id).focus(); return; }
+
+  const btn = document.querySelector(`#row-${id} .led-action button`);
+  btn.disabled = true; btn.textContent = 'Saving…';
+  try{
+    await api(`/follow-up/${id}/complete`, {
+      method:'POST', body: JSON.stringify({ outcome_status: outcome, note })
+    });
+    const row = document.getElementById('row-' + id);
+    row.style.transition = 'opacity 0.2s ease';
+    row.style.opacity = '0';
+    setTimeout(loadQueue, 200);
+  }catch(e){
+    btn.disabled = false; btn.textContent = 'Mark done';
+    alert('Could not save: ' + e.message);
+  }
+}
+
+function rowForVisitor(v){
+  const memberOptions = ALL_MEMBERS
+    .filter(m => m.role !== 'child')
+    .map(m => `<option value="${m.id}">${escapeHtml(m.full_name)} — ${m.role}</option>`)
+    .join('');
+  return `
+    <div class="ledger-row" id="visitor-row-${v.id}">
+      <div>
+        <div class="led-name">${escapeHtml(v.full_name)}</div>
+        <div class="led-meta">Visited ${escapeHtml(v.date_visited || '—')}</div>
+      </div>
+      <div class="led-phone mono">${escapeHtml(v.phone || '—')}</div>
+      <div class="led-status status-pending">Pending</div>
+      <div class="led-action">
+        ${v.converted ? '' : `
+        <select id="convert-${v.id}" style="max-width:170px;">
+          <option value="">Convert to…</option>
+          ${memberOptions}
+        </select>
+        <button onclick="convertVisitor(${v.id})" style="width:auto;">Link</button>`}
+        <button onclick="completeVisitorFollowUp(${v.id})" style="width:auto;">Mark contacted</button>
+      </div>
+    </div>`;
+}
+
+async function convertVisitor(visitorId){
+  const select = document.getElementById('convert-' + visitorId);
+  const memberId = select.value;
+  if(!memberId){ select.focus(); return; }
+
+  const btn = select.nextElementSibling;
+  const originalText = btn.textContent;
+  btn.disabled = true; btn.textContent = 'Linking…';
+  try{
+    await api(`/visitors/${visitorId}/convert`, {
+      method: 'POST', body: JSON.stringify({ member_id: Number(memberId) })
+    });
+    loadQueue();
+  }catch(e){
+    btn.disabled = false; btn.textContent = originalText;
+    alert('Could not link: ' + e.message);
+  }
+}
+
+async function completeVisitorFollowUp(visitorId){
+  const btn = document.querySelector(`#visitor-row-${visitorId} .led-action button`);
+  btn.disabled = true; btn.textContent = 'Saving…';
+  try{
+    await api(`/follow-up/visitors/${visitorId}/complete`, {
+      method: 'POST', body: JSON.stringify({ status: 'contacted' })
+    });
+    const row = document.getElementById('visitor-row-' + visitorId);
+    row.style.transition = 'opacity 0.2s ease';
+    row.style.opacity = '0';
+    setTimeout(loadQueue, 200);
+  }catch(e){
+    btn.disabled = false; btn.textContent = 'Mark contacted';
+    alert('Could not save: ' + e.message);
+  }
+}
+
+function openAddVisitorModal(){
+  document.getElementById('visName').value = '';
+  document.getElementById('visPhone').value = '';
+  document.getElementById('visEmail').value = '';
+  document.getElementById('visWantsFollowUp').checked = true;
+  document.getElementById('visErr').innerHTML = '';
+  document.getElementById('addVisitorModal').classList.add('active');
+}
+
+function closeAddVisitorModal(){
+  document.getElementById('addVisitorModal').classList.remove('active');
+}
+
+async function submitAddVisitor(){
+  const errEl = document.getElementById('visErr');
+  const btn = document.getElementById('visSubmitBtn');
+  errEl.innerHTML = '';
+
+  const full_name = document.getElementById('visName').value.trim();
+  if(!full_name){
+    errEl.innerHTML = errIcon('Full name is required');
+    return;
+  }
+
+  setBtnLoading(btn, true);
+  try{
+    await api('/visitors', {
+      method: 'POST',
+      body: JSON.stringify({
+        full_name,
+        phone: document.getElementById('visPhone').value.trim() || null,
+        email: document.getElementById('visEmail').value.trim() || null,
+        wants_follow_up: document.getElementById('visWantsFollowUp').checked,
+      }),
+    });
+    closeAddVisitorModal();
+    // Only the visitors filter view depends on this list -- refresh
+    // it if that's what's currently showing, same as other submit
+    // handlers in this file only refresh what's actually on screen.
+    if(document.getElementById('queueRoleFilter').value === 'visitors'){
+      loadQueue();
+    }
+  }catch(e){
+    errEl.innerHTML = errIcon(e.message);
+  }finally{
+    setBtnLoading(btn, false);
+  }
+}
+
+/* ================= Birthdays ================= */
+async function loadBirthdays(){
+  const el = document.getElementById('bdayList');
+  try{
+    const items = await api('/members/birthdays?days_ahead=7');
+    if(items.length === 0){
+      el.innerHTML = emptyState('No birthdays this week', 'Nobody active on the roster has a birthday in the next 7 days.');
+      return;
+    }
+    el.innerHTML = items.map(b => `
+      <div class="bday-row">
+        <div>
+          <div class="led-name">${escapeHtml(b.full_name)}</div>
+          <div class="led-meta">${escapeHtml(b.cell_name || 'Unassigned')} · <span class="mono">${escapeHtml(b.phone || '—')}</span></div>
+        </div>
+        <div class="bday-when">${b.days_until === 0 ? 'Today' : b.days_until === 1 ? 'Tomorrow' : 'In ' + b.days_until + ' days'}</div>
+      </div>`).join('');
+  }catch(e){
+    el.innerHTML = emptyState('Could not load birthdays', e.message);
+  }
+}
+
+/* ================= Members ================= */
+let ALL_MEMBERS = [];
+let ALL_CELLS = [];
+const ROLE_GROUPS = [
+  { key: 'admin',  label: 'Admin' },
+  { key: 'leader', label: 'Leaders' },
+  { key: 'adult',  label: 'Adults' },
+  { key: 'teen',   label: 'Teens' },
+  { key: 'child',  label: 'Children' },
+];
+const COLLAPSED_GROUPS = new Set();
+
+async function loadMembers(){
+  const el = document.getElementById('memberGroups');
+  try{
+    const [members, cells] = await Promise.all([
+      api('/members'),
+      api('/cells').catch(() => []), // leaders may not always have cells configured yet
+    ]);
+    ALL_MEMBERS = members;
+    ALL_CELLS = cells;
+    renderMemberGroups();
+  }catch(e){
+    el.innerHTML = emptyState('Could not load members', e.message);
+  }
+}
+
+function renderMemberGroups(){
+  const el = document.getElementById('memberGroups');
+  const q = (document.getElementById('memberSearch').value || '').trim().toLowerCase();
+  const filtered = q ? ALL_MEMBERS.filter(m => m.full_name.toLowerCase().includes(q)) : ALL_MEMBERS;
+
+  // Set before either early return below -- a search that happens to
+  // match nothing, or an empty roster, shouldn't also hide the
+  // duplicate-check button; it only depends on role, not on the
+  // current search result.
+  document.getElementById('scanDuplicatesBtn').style.display =
+    (ME && (ME.role === 'admin' || ME.role === 'leader')) ? 'inline-flex' : 'none';
+
+  if(ALL_MEMBERS.length === 0){
+    el.innerHTML = emptyState('No members yet', 'Registered members will appear here, grouped by role.');
+    return;
+  }
+  if(filtered.length === 0){
+    el.innerHTML = emptyState('No matches', 'Nobody on the roster matches "' + escapeHtml(q) + '".');
+    return;
+  }
+
+  el.innerHTML = ROLE_GROUPS.map(g => {
+    const rows = filtered.filter(m => m.role === g.key);
+    if(rows.length === 0) return '';
+    const collapsed = COLLAPSED_GROUPS.has(g.key) ? ' collapsed' : '';
+    return `
+      <div class="member-group${collapsed}" data-group="${g.key}">
+        <div class="member-group-head" onclick="toggleMemberGroup('${g.key}')">
+          <span class="member-group-title">${g.label}</span>
+          <span class="member-group-count">${rows.length}</span>
+          <svg class="member-group-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+        </div>
+        <div class="member-group-body ledger">
+          ${rows.map(rowForMember).join('')}
+        </div>
+      </div>`;
+  }).join('');
+}
+
+/* -------- Full-roster duplicate scan --------
+   Reuses the same /members/check-duplicate endpoint the live
+   register-member warning calls (see runRegDuplicateCheck), rather
+   than re-implementing name/phone/dob matching a second time in a
+   second place. First groups the already-loaded ALL_MEMBERS by
+   normalized name client-side (free -- no request) to find which
+   names actually repeat, then calls check-duplicate once per member
+   who shares a repeated name, passing that member's own phone/dob so
+   the grading is correct for them specifically, and exclude_id so a
+   member never matches against themselves. This is more calls than
+   once-per-unique-name, but calling with only one member's phone/dob
+   to represent a group of two-plus people would silently miss real
+   phone/dob matches between the OTHER members in that same group. */
+let ROSTER_SCAN_RUNNING = false;
+
+async function scanRosterForDuplicates(){
+  if(ROSTER_SCAN_RUNNING) return;
+  ROSTER_SCAN_RUNNING = true;
+
+  const panel = document.getElementById('rosterDuplicatesPanel');
+  const btn = document.getElementById('scanDuplicatesBtn');
+  setBtnLoading(btn, true);
+  panel.style.display = 'block';
+  panel.innerHTML = `<div class="stat-card"><div class="led-meta">Scanning the roster for repeated names…</div></div>`;
+
+  try{
+    // Group by normalized name -- same normalization the server uses
+    // (lowercase, collapsed whitespace) so a name that repeats with
+    // different capitalization or spacing still groups together.
+    const groups = new Map();
+    for(const m of ALL_MEMBERS){
+      const key = (m.full_name || '').toLowerCase().split(/\s+/).filter(Boolean).join(' ');
+      if(!key) continue;
+      if(!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(m);
+    }
+
+    const repeatedGroups = [...groups.values()].filter(g => g.length > 1);
+
+    if(repeatedGroups.length === 0){
+      panel.innerHTML = `
+        <div class="stat-card" style="padding:14px 16px; display:flex; justify-content:space-between; align-items:center;">
+          <div class="led-meta">No repeated names found on the current roster.</div>
+          <button class="btn-ghost" style="padding:4px 10px; font-size:12px;" onclick="document.getElementById('rosterDuplicatesPanel').style.display='none';">Dismiss</button>
+        </div>`;
+      return;
+    }
+
+    // One check-duplicate call per member in a repeated-name group,
+    // in parallel -- each call is scoped with that member's own
+    // phone/dob and exclude_id=their own id, so it reports who ELSE
+    // in the group looks like them specifically.
+    const membersToCheck = repeatedGroups.flat();
+    const results = await Promise.all(membersToCheck.map(async m => {
+      const params = new URLSearchParams({ full_name: m.full_name, exclude_id: String(m.id) });
+      if(m.phone) params.set('phone', m.phone);
+      if(m.date_of_birth) params.set('date_of_birth', m.date_of_birth);
+      try{
+        const data = await api('/members/check-duplicate?' + params.toString());
+        return { member: m, matches: data.matches || [] };
+      }catch(e){
+        return { member: m, matches: [] };
+      }
+    }));
+
+    // Re-assemble into one card per name-group rather than one per
+    // member -- a group of 3 "Chidinma Okafor" entries should render
+    // as a single group, not three overlapping individual warnings.
+    const byGroupKey = new Map();
+    for(const { member, matches } of results){
+      const key = (member.full_name || '').toLowerCase().split(/\s+/).filter(Boolean).join(' ');
+      if(!byGroupKey.has(key)) byGroupKey.set(key, { name: member.full_name, members: [], strongPairs: [] });
+      const g = byGroupKey.get(key);
+      g.members.push(member);
+      for(const match of matches){
+        if(match.match_reasons.includes('name_dob') || match.match_reasons.includes('name_phone')){
+          g.strongPairs.push({ from: member, reasons: match.match_reasons });
+        }
+      }
+    }
+
+    const groupCards = [...byGroupKey.values()].map(g => {
+      const isStrong = g.strongPairs.length > 0;
+      const REASON_LABEL = { name_dob: 'DOB', name_phone: 'phone' };
+      const strongLabels = [...new Set(g.strongPairs.flatMap(p => p.reasons.map(r => REASON_LABEL[r]).filter(Boolean)))];
+      const rows = g.members.map(m => `
+        <div style="display:flex; justify-content:space-between; align-items:center; padding:6px 0; border-top:1px solid var(--line); font-size:12.5px;">
+          <span>
+            <b>${escapeHtml(m.full_name)}</b>
+            <span style="color:var(--slate);"> · ${escapeHtml(m.role)}</span>
+            ${m.cell_name ? ` <span style="color:var(--slate);">· ${escapeHtml(m.cell_name)}</span>` : ''}
+          </span>
+          <span style="color:var(--slate); white-space:nowrap;">${m.joined_date ? 'Joined ' + escapeHtml(m.joined_date) : ''}</span>
+        </div>`).join('');
+
+      return `
+        <div style="background:${isStrong ? 'var(--clay-soft)' : 'var(--parchment-dim)'}; border:1px solid ${isStrong ? 'var(--clay)' : 'var(--line-strong)'}; border-radius:8px; padding:12px 14px; margin-top:10px;">
+          <div style="font-weight:600; font-size:13px;">
+            ${escapeHtml(g.name)} <span style="font-weight:400; color:var(--slate);">— ${g.members.length} entries</span>
+          </div>
+          <div class="led-meta" style="margin-top:2px;">
+            ${isStrong
+              ? `Same name and matching ${strongLabels.join(' and ')} across entries — likely the same person entered more than once.`
+              : `Same name, but no matching phone or date of birth — may be two different people.`}
+          </div>
+          ${rows}
+        </div>`;
+    }).join('');
+
+    const strongCount = [...byGroupKey.values()].filter(g => g.strongPairs.length > 0).length;
+
+    panel.innerHTML = `
+      <div class="stat-card" style="padding:14px 16px;">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <div style="font-weight:600; font-size:13.5px;">
+            ${repeatedGroups.length} repeated name${repeatedGroups.length === 1 ? '' : 's'} found${strongCount ? ` — ${strongCount} likely duplicate${strongCount === 1 ? '' : 's'}` : ''}
+          </div>
+          <button class="btn-ghost" style="padding:4px 10px; font-size:12px;" onclick="document.getElementById('rosterDuplicatesPanel').style.display='none';">Dismiss</button>
+        </div>
+        ${groupCards}
+      </div>`;
+  }catch(e){
+    panel.innerHTML = `<div class="stat-card"><div class="led-meta" style="color:var(--clay);">Could not scan the roster: ${escapeHtml(e.message)}</div></div>`;
+  }finally{
+    setBtnLoading(btn, false);
+    ROSTER_SCAN_RUNNING = false;
+  }
+}
+
+/* ================= Cell leaders ================= */
+async function loadCells(){
+  const el = document.getElementById('cellsGrid');
+  const subEl = document.getElementById('cellsSub');
+  try{
+    const cells = await api('/cells');
+    ALL_CELLS = cells;
+    subEl.textContent = cells.length
+      ? cells.length + ' cell' + (cells.length === 1 ? '' : 's') + ' on record.'
+      : 'Every cell group and who leads it.';
+    renderCells();
+  }catch(e){
+    el.innerHTML = emptyState('Could not load cells', e.message);
+  }
+}
+
+function renderCells(){
+  const el = document.getElementById('cellsGrid');
+  if(ALL_CELLS.length === 0){
+    el.innerHTML = emptyState('No cells yet', 'Promote a member to cell leader to create the first one.');
+    return;
+  }
+  const canReassignLeader = ME.role === 'admin'; // matches reassign_cell_leader's own admin-only gate
+  el.innerHTML = ALL_CELLS.map(c => {
+    const zone = c.member_count === 0 ? 'zone-flag' : 'zone-ok';
+    const pillLabel = c.member_count === 0 ? 'Empty' : (c.member_count + ' member' + (c.member_count === 1 ? '' : 's'));
+    const pillClass = c.member_count === 0 ? 'flag' : 'ok';
+    const initials = escapeHtml(c.name).split(' ').filter(Boolean).slice(0,2).map(w => w[0]).join('').toUpperCase();
+    const eligibleLeaders = ALL_MEMBERS.filter(m => m.role !== 'child' && m.id !== c.leader_id);
+    return `
+    <div class="leader-card ${zone}">
+      <span class="card-pill ${pillClass}">${pillLabel}</span>
+      <div class="leader-mark">${initials}</div>
+      <div class="card-name">${escapeHtml(c.name)}</div>
+      <div class="card-meta">Led by ${c.leader_name ? escapeHtml(c.leader_name) : 'Unassigned'}</div>
+      <div class="card-facts">
+        <div class="card-fact">${c.meeting_day ? 'Meets <b>' + escapeHtml(c.meeting_day) + '</b>' : 'No meeting day set'}</div>
+      </div>
+      ${canReassignLeader ? `
+      <div style="margin-top:12px; display:flex; gap:8px;">
+        <select id="leaderReassignSelect-${c.id}" style="flex:1;">
+          <option value="">Change leader…</option>
+          ${eligibleLeaders.map(m => `<option value="${m.id}">${escapeHtml(m.full_name)} — ${m.role}</option>`).join('')}
+        </select>
+        <button class="btn-secondary" style="width:auto;" onclick="submitCellLeaderReassign(${c.id})">Set</button>
+      </div>
+      <div class="field-err" id="leaderReassignErr-${c.id}"></div>` : ''}
+    </div>`;
+  }).join('');
+
+  if(canReassignLeader && ALL_MEMBERS.length === 0){ loadMembers(); }
+}
+
+async function submitCellLeaderReassign(cellId){
+  const select = document.getElementById('leaderReassignSelect-' + cellId);
+  const errEl = document.getElementById('leaderReassignErr-' + cellId);
+  errEl.innerHTML = '';
+  if(!select.value){
+    errEl.innerHTML = errIcon('Choose a member first.');
+    return;
+  }
+  try{
+    await api('/cells/' + cellId + '/leader', {
+      method: 'PATCH',
+      body: JSON.stringify({ leader_id: Number(select.value) }),
+    });
+    // Unconditional refresh, same proven pattern as every other
+    // action in this app -- the card's "Led by" line and the member
+    // detail modal (if open on either the old or new leader) should
+    // both reflect this immediately.
+    loadCells();
+    loadMembers();
+  }catch(e){
+    errEl.innerHTML = errIcon(e.message);
+  }
+}
+
+function openCreateCellModal(){
+  document.getElementById('cellName').value = '';
+  document.getElementById('cellMeetingDay').value = '';
+  document.getElementById('cellErr').innerHTML = '';
+
+  const eligible = ALL_MEMBERS.filter(m => m.role !== 'child');
+  const leaderSel = document.getElementById('cellLeaderId');
+  leaderSel.innerHTML = eligible.length
+    ? eligible.map(m => `<option value="${m.id}">${escapeHtml(m.full_name)} — ${m.role}</option>`).join('')
+    : '<option value="">No eligible member on record yet</option>';
+
+  document.getElementById('createCellModal').classList.add('active');
+}
+
+function closeCreateCellModal(){
+  document.getElementById('createCellModal').classList.remove('active');
+}
+
+async function submitCreateCell(){
+  const errEl = document.getElementById('cellErr');
+  const btn = document.getElementById('cellSubmitBtn');
+  errEl.innerHTML = '';
+
+  const member_id = document.getElementById('cellLeaderId').value;
+  const cell_name = document.getElementById('cellName').value.trim() || null;
+  const meeting_day = document.getElementById('cellMeetingDay').value || null;
+
+  if(!member_id){ errEl.innerHTML = errIcon('Choose a member to promote.'); return; }
+
+  setBtnLoading(btn, true);
+  try{
+    await api('/members/' + member_id + '/promote-to-leader', {
+      method: 'POST',
+      body: JSON.stringify({ cell_name, meeting_day }),
+    });
+    closeCreateCellModal();
+    await Promise.all([loadCells(), loadMembers()]);
+  }catch(e){
+    errEl.innerHTML = errIcon(e.message);
+  }finally{
+    setBtnLoading(btn, false);
+  }
+}
+
+/* ================= Events ================= */
+const EVENT_CATEGORIES = [
+  'Sunday Service', 'Midweek Service', 'Prayer Meeting', 'Convention',
+  'Conference', 'Youth Program', "Women's Fellowship", "Men's Fellowship",
+  'Evangelism', 'Outreach', 'Leadership Meeting', 'Training',
+  'Children Service', 'Special Program', 'Other',
+];
+let ALL_EVENTS = [];
+
+async function loadEvents(){
+  const upEl = document.getElementById('eventsUpcoming');
+  const pastEl = document.getElementById('eventsPast');
+  try{
+    ALL_EVENTS = await api('/events');
+    renderEvents();
+  }catch(e){
+    upEl.innerHTML = emptyState('Could not load events', e.message);
+    pastEl.innerHTML = '';
+  }
+}
+
+// Combines e.date with an "HH:MM" time string (what the <input type="time">
+// on the create-event form always sends) into a real Date in the browser's
+// local time. Falls back to midnight/end-of-day when a time wasn't set,
+// since venue-only events (no start/end time) still need a defined phase.
+function eventDateTime(dateStr, timeStr, fallbackHM){
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const [hh, mm] = (timeStr || fallbackHM).split(':').map(Number);
+  return new Date(y, m - 1, d, hh, mm, 0, 0);
+}
+
+// Single source of truth for where an event sits in its lifecycle, so the
+// list-view bucketing (upcoming vs past) and the card's button logic can
+// never disagree with each other the way they used to (the old code only
+// ever compared bare dates, so "today's" event was either fully upcoming
+// or fully past with no in-between, and nothing there knew about time-of-
+// day at all).
+//   'cancelled'  -> is_cancelled=True, regardless of date/time
+//   'upcoming'   -> start time hasn't arrived yet
+//   'ongoing'    -> between start and end time right now
+//   'needs_attendance' -> end time has passed, nobody has submitted attendance yet
+//   'finished'   -> end time has passed AND attendance was already submitted
+function computeEventPhase(e){
+  if(e.is_cancelled) return 'cancelled';
+
+  const now = new Date();
+  const start = eventDateTime(e.date, e.start_time, '00:00');
+  const end = eventDateTime(e.date, e.end_time, '23:59');
+
+  if(now < start) return 'upcoming';
+  if(now <= end) return 'ongoing';
+  return e.attendance_taken ? 'finished' : 'needs_attendance';
+}
+
+function renderEvents(){
+  const viewMode = document.getElementById('eventsViewToggle').value;
+  const listEl = document.getElementById('eventsListView');
+  const calEl = document.getElementById('eventsCalendarView');
+
+  if(viewMode === 'calendar'){
+    listEl.style.display = 'none';
+    calEl.style.display = 'block';
+    renderEventsCalendar();
+    return;
+  }
+
+  listEl.style.display = 'block';
+  calEl.style.display = 'none';
+
+  const upEl = document.getElementById('eventsUpcoming');
+  const pastEl = document.getElementById('eventsPast');
+
+  // Bucketed by phase, not just by comparing bare dates -- an event whose
+  // date is today but whose end_time hasn't arrived yet belongs with
+  // "upcoming/ongoing", not with things that have actually finished.
+  const upcoming = ALL_EVENTS
+    .filter(e => { const p = computeEventPhase(e); return p === 'upcoming' || p === 'ongoing'; })
+    .sort((a,b) => a.date.localeCompare(b.date) || (a.start_time||'').localeCompare(b.start_time||''));
+  const past = ALL_EVENTS
+    .filter(e => { const p = computeEventPhase(e); return p === 'needs_attendance' || p === 'finished' || p === 'cancelled'; })
+    .sort((a,b) => b.date.localeCompare(a.date) || (b.start_time||'').localeCompare(a.start_time||''));
+
+  upEl.innerHTML = upcoming.length === 0
+    ? emptyState('No upcoming events', 'New events will appear here once created.')
+    : upcoming.map(e => cardForEvent(e)).join('');
+
+  pastEl.innerHTML = past.length === 0
+    ? emptyState('No past events yet', 'Events move here automatically once their date passes.')
+    : past.map(e => cardForEvent(e)).join('');
+}
+
+// Small pill shown next to the event name so the phase is visible at a
+// glance, independent of which column (upcoming/past) it landed in.
+function phasePill(phase){
+  const PILLS = {
+    upcoming: { label: 'Upcoming', cls: 'ok' },
+    ongoing: { label: 'Event started', cls: 'senior' },
+    needs_attendance: { label: 'Event finished — attendance needed', cls: 'flag' },
+    finished: { label: 'Event finished', cls: 'ok' },
+    cancelled: { label: 'Cancelled', cls: 'flag' },
+  };
+  const p = PILLS[phase] || PILLS.upcoming;
+  return `<span class="card-pill ${p.cls}">${escapeHtml(p.label)}</span>`;
+}
+
+function cardForEvent(e){
+  const phase = computeEventPhase(e);
+  const isCancelled = phase === 'cancelled';
+  const zone = (isCancelled || phase === 'needs_attendance') ? 'zone-flag' : 'zone-ok';
+  const initials = escapeHtml(e.category || 'Event').split(' ').filter(Boolean).slice(0,2).map(w => w[0]).join('').toUpperCase();
+  const timeRange = [e.start_time, e.end_time].filter(Boolean).join(' – ');
+
+  // Take attendance is only offered once the event has actually finished
+  // and nobody has submitted attendance for it yet -- not "any past
+  // event", which is what silently left the buttons on forever before,
+  // and not while the event is still upcoming/ongoing, since there's
+  // nothing to take attendance FOR yet.
+  const canTakeAttendance = ME && (ME.role === 'admin' || ME.role === 'leader') && phase === 'needs_attendance';
+  const canCancel = ME && ME.role === 'admin' && (phase === 'upcoming' || phase === 'ongoing' || phase === 'needs_attendance');
+  const canCheckNoShows = ME && (ME.role === 'admin' || ME.role === 'leader') && (phase === 'needs_attendance' || phase === 'finished');
+
+  return `
+    <div class="leader-card ${zone}">
+      ${phasePill(phase)}
+      <div class="leader-mark">${initials}</div>
+      <div class="card-name" style="${isCancelled ? 'text-decoration:line-through; opacity:0.7;' : ''}">${escapeHtml(e.name)}</div>
+      <div class="card-meta">${escapeHtml(e.date)}${timeRange ? ' · ' + escapeHtml(timeRange) : ''}</div>
+      <div class="card-facts">
+        ${e.venue ? `<div class="card-fact">${escapeHtml(e.venue)}</div>` : ''}
+        ${e.description ? `<div class="card-fact">${escapeHtml(e.description)}</div>` : ''}
+      </div>
+      ${canTakeAttendance ? `<div style="margin-top:12px;"><button class="btn-primary" style="margin-top:0;" onclick="openAttendanceModal(${e.id})">Take attendance</button></div>` : ''}
+      ${canCancel ? `<div style="margin-top:8px;"><button class="btn-danger" style="width:100%;" onclick="cancelEvent(${e.id})">Cancel event</button></div>` : ''}
+      ${canCheckNoShows ? `<div style="margin-top:8px;"><button class="btn-secondary" style="width:100%;" onclick="checkRsvpNoShows(${e.id})">Check RSVP no-shows</button></div><div id="noshows-${e.id}" style="margin-top:10px;"></div>` : ''}
+      ${phase === 'finished' ? `<div class="led-meta" style="margin-top:10px;">Attendance recorded for this event.</div>` : ''}
+    </div>`;
+}
+
+async function checkRsvpNoShows(serviceId){
+  const container = document.getElementById('noshows-' + serviceId);
+  container.innerHTML = '<div class="led-meta">Checking…</div>';
+  try{
+    const noShows = await api('/services/' + serviceId + '/rsvp-no-shows');
+    if(noShows.length === 0){
+      container.innerHTML = '<div class="led-meta">Nobody who RSVP\'d yes missed this one.</div>';
+      return;
+    }
+    container.innerHTML = `
+      <div class="led-meta" style="margin-bottom:6px; font-weight:500;">Said yes, didn't come:</div>
+      ${noShows.map(n => `
+        <div style="display:flex; justify-content:space-between; padding:6px 0; border-top:1px solid var(--line); font-size:12.5px;">
+          <span>${escapeHtml(n.member_name || 'Unknown')}</span>
+          <span class="mono" style="color:var(--slate);">${escapeHtml(n.phone || '—')}</span>
+        </div>`).join('')}`;
+  }catch(e){
+    container.innerHTML = '<div class="led-meta" style="color:var(--clay);">Could not check: ' + escapeHtml(e.message) + '</div>';
+  }
+}
+
+/* ================= Take attendance ================= */
+// Keyed by member.id -> true (present) | false (absent) | undefined (untouched).
+// Untouched stays out of present_member_ids on submit, same as "absent" --
+// the backend treats "not in the list" as absent either way (see
+// attendance_logic.submit_attendance), so this is purely a UI nicety
+// that lets a leader visually distinguish "haven't gotten to them yet"
+// from "checked, and they're not here."
+let ATT_SERVICE_ID = null;
+let ATT_STATE = {};
+
+function openAttendanceModal(serviceId){
+  const event = ALL_EVENTS.find(e => e.id === serviceId);
+  ATT_SERVICE_ID = serviceId;
+  ATT_STATE = {};
+
+  document.getElementById('attEventLabel').textContent = event
+    ? escapeHtml(event.name) + ' · ' + escapeHtml(event.date)
+    : '';
+  document.getElementById('attSearch').value = '';
+  document.getElementById('attErr').innerHTML = '';
+
+  // Everyone who can physically be present gets a row -- leaders and
+  // admins included, not just members. submit_attendance() marks
+  // anyone absent from the submitted list absent by omission, so a
+  // leader whose row is never shown here would silently be recorded
+  // absent from their OWN attendance stream every single week.
+  renderAttendanceRows();
+  document.getElementById('attendanceModal').classList.add('active');
+}
+
+function closeAttendanceModal(){
+  document.getElementById('attendanceModal').classList.remove('active');
+}
+
+function attendanceEligibleMembers(){
+  // Children are tracked via their guardian, not directly -- excluded
+  // here the same way the "promote to cell leader" member list excludes
+  // them, and the same way submit_attendance()'s own docstring says
+  // both accountability streams exclude role='child'.
+  const q = document.getElementById('attSearch').value.trim().toLowerCase();
+  return ALL_MEMBERS
+    .filter(m => m.role !== 'child')
+    .filter(m => !q || m.full_name.toLowerCase().includes(q));
+}
+
+function renderAttendanceRows(){
+  const el = document.getElementById('attRows');
+  const members = attendanceEligibleMembers();
+
+  if(ALL_MEMBERS.filter(m => m.role !== 'child').length === 0){
+    el.innerHTML = emptyState('No members yet', 'Register members before taking attendance.');
+    updateAttendanceSummary();
+    return;
+  }
+  if(members.length === 0){
+    el.innerHTML = emptyState('No matches', 'Try a different search.');
+    updateAttendanceSummary();
+    return;
+  }
+
+  el.innerHTML = members.map(m => {
+    const state = ATT_STATE[m.id]; // true | false | undefined
+    return `
+    <div class="att-row">
+      <div>
+        <div class="att-name">${escapeHtml(m.full_name)}</div>
+        <div class="att-role">${escapeHtml(m.role)}${m.cell_name ? ' · ' + escapeHtml(m.cell_name) : ''}</div>
+      </div>
+      <div class="att-toggle">
+        <button class="absent-btn ${state === false ? 'active' : ''}" onclick="setAttendance(${m.id}, false)" aria-label="Mark ${escapeHtml(m.full_name)} absent" title="Absent">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
+        <button class="present-btn ${state === true ? 'active' : ''}" onclick="setAttendance(${m.id}, true)" aria-label="Mark ${escapeHtml(m.full_name)} present" title="Present">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><path d="M20 6L9 17l-5-5"/></svg>
+        </button>
+      </div>
+    </div>`;
+  }).join('');
+
+  updateAttendanceSummary();
+}
+
+function setAttendance(memberId, isPresent){
+  // Clicking the already-active toggle clears it back to untouched,
+  // so a mis-tap isn't stuck -- otherwise the only way off "present"
+  // is clicking "absent", which is a different claim, not a correction.
+  ATT_STATE[memberId] = (ATT_STATE[memberId] === isPresent) ? undefined : isPresent;
+  renderAttendanceRows();
+}
+
+function updateAttendanceSummary(){
+  const el = document.getElementById('attSummary');
+  const total = ALL_MEMBERS.filter(m => m.role !== 'child').length;
+  const values = Object.values(ATT_STATE);
+  const presentCount = values.filter(v => v === true).length;
+  const absentCount = values.filter(v => v === false).length;
+  const untouched = total - presentCount - absentCount;
+  el.innerHTML = `
+    <span><b>${presentCount}</b> present</span>
+    <span><b>${absentCount}</b> marked absent</span>
+    <span><b>${untouched}</b> not yet checked</span>`;
+}
+
+async function submitAttendance(){
+  const errEl = document.getElementById('attErr');
+  const btn = document.getElementById('attSubmitBtn');
+  errEl.innerHTML = '';
+
+  const present_member_ids = Object.entries(ATT_STATE)
+    .filter(([, v]) => v === true)
+    .map(([id]) => Number(id));
+
+  setBtnLoading(btn, true);
+  try{
+    const result = await api('/attendance/submit', {
+      method: 'POST',
+      body: JSON.stringify({ service_id: ATT_SERVICE_ID, present_member_ids }),
+    });
+    closeAttendanceModal();
+    // Absence follow-ups were just generated server-side -- refresh
+    // whatever's already on screen that depends on that (queue,
+    // admin overview, statistics), same set loadQueue-adjacent
+    // actions elsewhere in this file already refresh together.
+    const refreshes = [loadEvents()];
+    if(document.getElementById('page-queue')) refreshes.push(loadQueue());
+    if(ME && ME.role === 'admin'){ refreshes.push(loadAdminOverview(), loadStatistics(), loadLeaderAccountability()); }
+    await Promise.all(refreshes).catch(() => {});
+    alert(`Attendance saved. ${result.absent_count} member${result.absent_count === 1 ? '' : 's'} recorded absent.`);
+  }catch(e){
+    errEl.innerHTML = errIcon(e.message);
+  }finally{
+    setBtnLoading(btn, false);
+  }
+}
+
+/* ---- Events calendar view ---- */
+let CALENDAR_YEAR = new Date().getFullYear();
+let CALENDAR_MONTH = new Date().getMonth(); // 0-indexed
+let CALENDAR_SELECTED_DATE = null;
+
+function renderEventsCalendar(){
+  const el = document.getElementById('eventsCalendarView');
+  const todayStr = new Date().toISOString().slice(0, 10);
+
+  const eventsByDate = {};
+  for(const e of ALL_EVENTS){
+    (eventsByDate[e.date] = eventsByDate[e.date] || []).push(e);
+  }
+
+  const firstOfMonth = new Date(CALENDAR_YEAR, CALENDAR_MONTH, 1);
+  const startWeekday = firstOfMonth.getDay(); // 0=Sun
+  const daysInMonth = new Date(CALENDAR_YEAR, CALENDAR_MONTH + 1, 0).getDate();
+  const monthLabel = firstOfMonth.toLocaleString(undefined, { month: 'long', year: 'numeric' });
+
+  let cells = '';
+  for(let i = 0; i < startWeekday; i++){
+    cells += `<div style="aspect-ratio:1; min-height:56px;"></div>`;
+  }
+  for(let day = 1; day <= daysInMonth; day++){
+    const dateStr = `${CALENDAR_YEAR}-${String(CALENDAR_MONTH + 1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+    const dayEvents = eventsByDate[dateStr] || [];
+    const isToday = dateStr === todayStr;
+    const isSelected = dateStr === CALENDAR_SELECTED_DATE;
+    const dots = dayEvents.slice(0, 3).map(e =>
+      `<div style="width:5px; height:5px; border-radius:50%; background:${e.is_cancelled ? 'var(--slate)' : 'var(--clay)'};"></div>`
+    ).join('');
+    cells += `
+      <div onclick="selectCalendarDay('${dateStr}')" style="
+        aspect-ratio:1; min-height:56px; padding:6px;
+        border-radius:8px; cursor:pointer;
+        border:1px solid ${isSelected ? 'var(--clay)' : 'var(--line)'};
+        background:${isSelected ? 'var(--clay-soft)' : (isToday ? 'var(--parchment-dim)' : 'transparent')};
+        display:flex; flex-direction:column; gap:4px;
+      ">
+        <div style="font-size:12px; font-weight:${isToday ? '600' : '400'}; color:${isToday ? 'var(--clay)' : 'var(--ink)'};">${day}</div>
+        <div style="display:flex; gap:3px; flex-wrap:wrap;">${dots}</div>
+      </div>`;
+  }
+
+  const weekdayLabels = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']
+    .map(d => `<div style="font-size:10.5px; color:var(--slate); text-align:center; padding-bottom:4px;">${d}</div>`).join('');
+
+  el.innerHTML = `
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:14px;">
+      <button class="icon-btn" onclick="shiftCalendarMonth(-1)" aria-label="Previous month">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M15 18l-6-6 6-6"/></svg>
+      </button>
+      <div class="led-name">${escapeHtml(monthLabel)}</div>
+      <button class="icon-btn" onclick="shiftCalendarMonth(1)" aria-label="Next month">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 6l6 6-6 6"/></svg>
+      </button>
+    </div>
+    <div style="display:grid; grid-template-columns:repeat(7,1fr); gap:6px;">
+      ${weekdayLabels}
+      ${cells}
+    </div>
+    <div id="calendarDayDetail" style="margin-top:20px;"></div>`;
+
+  if(CALENDAR_SELECTED_DATE){
+    renderCalendarDayDetail();
+  }
+}
+
+function shiftCalendarMonth(delta){
+  CALENDAR_MONTH += delta;
+  if(CALENDAR_MONTH > 11){ CALENDAR_MONTH = 0; CALENDAR_YEAR++; }
+  if(CALENDAR_MONTH < 0){ CALENDAR_MONTH = 11; CALENDAR_YEAR--; }
+  renderEventsCalendar();
+}
+
+function selectCalendarDay(dateStr){
+  CALENDAR_SELECTED_DATE = (CALENDAR_SELECTED_DATE === dateStr) ? null : dateStr;
+  renderEventsCalendar();
+}
+
+function renderCalendarDayDetail(){
+  const detailEl = document.getElementById('calendarDayDetail');
+  if(!detailEl) return;
+  const dayEvents = ALL_EVENTS.filter(e => e.date === CALENDAR_SELECTED_DATE);
+  const today = new Date().toISOString().slice(0, 10);
+  const isPast = CALENDAR_SELECTED_DATE < today;
+
+  if(dayEvents.length === 0){
+    detailEl.innerHTML = `<div class="section-label">${escapeHtml(CALENDAR_SELECTED_DATE)}</div>` +
+      emptyState('Nothing on this day', 'No events are scheduled for this date.');
+    return;
+  }
+  detailEl.innerHTML = `<div class="section-label">${escapeHtml(CALENDAR_SELECTED_DATE)}</div>
+    <div class="leader-grid">${dayEvents.map(e => cardForEvent(e, isPast)).join('')}</div>`;
+}
+
+function openCreateEventModal(){
+  document.getElementById('evName').value = '';
+  document.getElementById('evDate').value = '';
+  document.getElementById('evVenue').value = '';
+  document.getElementById('evStartTime').value = '';
+  document.getElementById('evEndTime').value = '';
+  document.getElementById('evDescription').value = '';
+  document.getElementById('evVisibility').value = 'public';
+  document.getElementById('evErr').innerHTML = '';
+
+  const catSel = document.getElementById('evCategory');
+  catSel.innerHTML = EVENT_CATEGORIES.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
+
+  document.getElementById('createEventModal').classList.add('active');
+}
+
+function closeCreateEventModal(){
+  document.getElementById('createEventModal').classList.remove('active');
+}
+
+async function submitCreateEvent(){
+  const errEl = document.getElementById('evErr');
+  const btn = document.getElementById('evSubmitBtn');
+  errEl.innerHTML = '';
+
+  const name = document.getElementById('evName').value.trim();
+  const date = document.getElementById('evDate').value;
+  const category = document.getElementById('evCategory').value;
+  const venue = document.getElementById('evVenue').value.trim() || null;
+  const start_time = document.getElementById('evStartTime').value || null;
+  const end_time = document.getElementById('evEndTime').value || null;
+  const description = document.getElementById('evDescription').value.trim() || null;
+  const visibility = document.getElementById('evVisibility').value;
+
+  if(!name){ errEl.innerHTML = errIcon('Enter an event name.'); return; }
+  if(!date){ errEl.innerHTML = errIcon('Choose a date.'); return; }
+
+  setBtnLoading(btn, true);
+  try{
+    await api('/events', {
+      method: 'POST',
+      body: JSON.stringify({ name, date, category, venue, start_time, end_time, description, visibility }),
+    });
+    closeCreateEventModal();
+    loadEvents();
+  }catch(e){
+    errEl.innerHTML = errIcon(e.message || 'Could not create this event.');
+  }finally{
+    setBtnLoading(btn, false);
+  }
+}
+
+async function cancelEvent(eventId){
+  if(!confirm('Cancel this event? It will be marked cancelled and hidden from attendance-taking, but stays visible in the events list.')) return;
+  try{
+    await api('/events/' + eventId, { method: 'DELETE' });
+    loadEvents();
+  }catch(e){
+    alert(e.message || 'Could not cancel this event.');
+  }
+}
+
+function rowForMember(m){
+  const meta = [m.cell_name, m.membership_status !== 'active' ? m.membership_status : null]
+    .filter(Boolean).join(' · ') || '—';
+  return `
+    <div class="member-row" onclick="openMemberDetail(${m.id})">
+      <div>
+        <div class="led-name">${escapeHtml(m.full_name)}</div>
+        <div class="led-meta">${escapeHtml(meta)}</div>
+      </div>
+      <div><span class="pill role-${m.role}">${m.role.charAt(0).toUpperCase() + m.role.slice(1)}</span></div>
+      <div class="led-meta">${m.joined_date ? 'Joined ' + m.joined_date : ''}</div>
+    </div>`;
+}
+
+function detailRow(label, value){
+  const v = value === null || value === undefined || value === '' ? 'Not on file' : escapeHtml(value);
+  const cls = (value === null || value === undefined || value === '') ? ' empty' : '';
+  return `<div class="detail-field"><div class="detail-label">${label}</div><div class="detail-value${cls}">${v}</div></div>`;
+}
+
+let DETAIL_MEMBER = null;
+let EDIT_MODE = false;
+
+async function openMemberDetail(id){
+  const modal = document.getElementById('memberDetailModal');
+  document.getElementById('detailName').textContent = 'Loading…';
+  document.getElementById('detailRole').textContent = '';
+  document.getElementById('detailBody').innerHTML = '';
+  EDIT_MODE = false;
+  modal.classList.add('active');
+  try{
+    const m = await api('/members/' + id);
+    DETAIL_MEMBER = m;
+    document.getElementById('detailName').textContent = m.full_name;
+    document.getElementById('detailRole').innerHTML = `<span class="pill role-${m.role}">${m.role.charAt(0).toUpperCase() + m.role.slice(1)}</span>`;
+    renderMemberDetailBody();
+  }catch(e){
+    document.getElementById('detailName').textContent = 'Could not load';
+    document.getElementById('detailBody').innerHTML = detailRow('Error', e.message);
+  }
+}
+
+function renderMemberDetailBody(){
+  const m = DETAIL_MEMBER;
+  if(!m) return;
+
+  if(EDIT_MODE){
+    document.getElementById('detailBody').innerHTML = editMemberFormHtml(m);
+    return;
+  }
+
+  const canEdit = ME.role === 'admin' || ME.role === 'leader';
+  document.getElementById('detailBody').innerHTML =
+    (canEdit ? `<button class="btn-secondary" style="width:100%; margin-bottom:14px;" onclick="enterEditMemberMode()">Edit details</button>` : '') +
+    detailRow('Phone', m.phone) +
+    detailRow('Area', m.area) +
+    detailRow('Email', m.email) +
+    detailRow('Date of birth', m.dob_year_unknown ? formatMonthDay(m.dob_month_day) + ' (year not on file)' : m.date_of_birth) +
+    detailRow('Cell group', m.cell_name) +
+    (canEdit && m.role !== 'child' ? cellReassignHtml(m) : '') +
+    (canEdit && (m.role === 'adult' || m.role === 'teen' || m.role === 'child') ? reclassifyRoleHtml(m) : '') +
+    detailRow('Guardian', m.guardian_name) +
+    detailRow('Joined', m.joined_date) +
+    detailRow('Status', m.membership_status) +
+    renderRoleActions(m);
+
+  if(canEdit && m.role !== 'child' && ALL_CELLS.length === 0){ loadCells(); }
+}
+
+// "MM-DD" -> "Jul 14", for showing a year-unknown birthday without
+// exposing DOB_UNKNOWN_YEAR_SENTINEL or a fake year to the person.
+function formatMonthDay(monthDay){
+  if(!monthDay) return '';
+  const [month, day] = monthDay.split('-').map(Number);
+  const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  return `${MONTH_NAMES[month - 1]} ${day}`;
+}
+
+function reclassifyRoleHtml(m){
+  // Own block, deliberately separate from renderRoleActions -- that
+  // function returns '' outright for m.role === 'child' (children
+  // can't be promoted/suspended), which would silently hide this
+  // action for exactly the population most likely to need it: a
+  // child who's actually a teen, or the reverse. cellReassignHtml
+  // above is the template this follows -- standalone action, its own
+  // inline error slot, its own submit function.
+  const OPTIONS = [
+    { value: 'adult', label: 'Adult' },
+    { value: 'teen', label: 'Teen' },
+    { value: 'child', label: 'Child' },
+  ].filter(o => o.value !== m.role);
+
+  return `
+    <div class="detail-field">
+      <div class="detail-label">Not actually ${escapeHtml(m.role)}?</div>
+      <div style="display:flex; gap:8px; margin-top:4px;">
+        <select id="reclassifyRoleSelect" style="flex:1;">
+          <option value="">Reclassify as…</option>
+          ${OPTIONS.map(o => `<option value="${o.value}">${o.label}</option>`).join('')}
+        </select>
+        <button class="btn-secondary" style="width:auto;" onclick="submitReclassifyRole(${m.id})">Change</button>
+      </div>
+      <div class="field-err" id="reclassifyRoleErr"></div>
+    </div>`;
+}
+
+async function submitReclassifyRole(memberId){
+  const select = document.getElementById('reclassifyRoleSelect');
+  const errEl = document.getElementById('reclassifyRoleErr');
+  errEl.innerHTML = '';
+  const newRole = select.value;
+
+  if(!newRole){
+    errEl.innerHTML = errIcon('Choose a classification first.');
+    return;
+  }
+
+  const body = { member_id: memberId, new_role: newRole };
+
+  // Reclassifying TO child requires a guardian_id server-side (same
+  // rule register_member enforces at creation) -- if this member
+  // doesn't already have one on file, ask for it inline rather than
+  // letting the request 400 with no way to actually complete it here.
+  if(newRole === 'child' && !DETAIL_MEMBER.guardian_id){
+    const guardianName = prompt("This member needs a guardian on file to be classified as a child. Enter the guardian's full name to search for them, or Cancel:");
+    if(!guardianName) return;
+    const guardian = ALL_MEMBERS.find(x =>
+      x.full_name.toLowerCase() === guardianName.trim().toLowerCase() &&
+      (x.role === 'adult' || x.role === 'leader' || x.role === 'admin')
+    );
+    if(!guardian){
+      errEl.innerHTML = errIcon(`No adult, leader, or admin named "${guardianName}" found on the roster.`);
+      return;
+    }
+    body.guardian_id = guardian.id;
+  }
+
+  try{
+    await api('/admin/reclassify-role', { method: 'POST', body: JSON.stringify(body) });
+    await openMemberDetail(memberId); // refresh modal with the new role/actions
+    loadMembers();
+    loadAuditLog();
+  }catch(e){
+    errEl.innerHTML = errIcon(e.message);
+  }
+}
+
+function cellReassignHtml(m){
+  // Standalone action, separate from Edit details -- reachable from
+  // any member's own page rather than requiring you to browse into a
+  // specific cell first. Most of the time you're looking at the
+  // person who relocated, not browsing cells to find them.
+  const options = ALL_CELLS
+    .filter(c => c.id !== m.cell_id)
+    .map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`)
+    .join('');
+  return `
+    <div class="detail-field">
+      <div class="detail-label">Move to cell</div>
+      <div style="display:flex; gap:8px; margin-top:4px;">
+        <select id="cellReassignSelect" style="flex:1;">
+          <option value="">${ALL_CELLS.length ? 'Choose a cell…' : 'Loading cells…'}</option>
+          ${options}
+          ${m.cell_id ? '<option value="">— Remove from cell —</option>' : ''}
+        </select>
+        <button class="btn-secondary" style="width:auto;" onclick="submitCellReassign(${m.id})">Move</button>
+      </div>
+      <div class="field-err" id="cellReassignErr"></div>
+    </div>`;
+}
+
+async function submitCellReassign(memberId){
+  const select = document.getElementById('cellReassignSelect');
+  const errEl = document.getElementById('cellReassignErr');
+  errEl.innerHTML = '';
+  const value = select.value;
+
+  // An empty selection is only meaningful as "remove from cell" when
+  // the member currently has one -- otherwise there's nothing to do.
+  if(value === '' && !DETAIL_MEMBER.cell_id){
+    errEl.innerHTML = errIcon('Choose a cell first.');
+    return;
+  }
+
+  try{
+    const updated = await api('/members/' + memberId + '/cell', {
+      method: 'PATCH',
+      body: JSON.stringify({ cell_id: value ? Number(value) : null }),
+    });
+    DETAIL_MEMBER = updated;
+    renderMemberDetailBody();
+    // Unconditional, matching the pattern already proven for role
+    // actions and edit-member: the roster's cell_name and the Cell
+    // leaders page's own membership counts should reflect this
+    // immediately, not only if you happen to already be on that page.
+    loadMembers();
+    if(document.getElementById('page-cells').classList.contains('active')) loadCells();
+  }catch(e){
+    errEl.innerHTML = errIcon(e.message);
+  }
+}
+
+function editMemberFormHtml(m){
+  // Deliberately excludes role, cell group, and status -- those are
+  // owned by promote-to-leader, promote/demote-admin, and
+  // suspend/restore, each with its own guard. Mixing them into this
+  // generic edit form would let it quietly bypass those checks, which
+  // is exactly the class of bug this app has had repeatedly. The
+  // backend enforces this too (PATCH /members/<id> 400s on those
+  // fields) -- this is a UI-level mirror of that boundary, not the
+  // boundary itself.
+  return `
+    <div class="field">
+      <label>Full name</label>
+      <input type="text" id="editFullName" value="${escapeHtml(m.full_name || '')}">
+    </div>
+    <div class="field">
+      <label>Date of birth</label>
+      <input type="date" id="editDob" value="${m.dob_year_unknown ? '' : (m.date_of_birth || '')}" ${m.dob_year_unknown ? 'disabled' : ''}>
+      <label style="display:flex; align-items:center; gap:6px; margin-top:6px; font-size:12px; color:var(--slate); font-weight:400; cursor:pointer;">
+        <input type="checkbox" id="editDobYearUnknown" onchange="onEditDobYearUnknownChange()" style="width:auto; margin:0;" ${m.dob_year_unknown ? 'checked' : ''}>
+        Don't know the year — just the birthday
+      </label>
+    </div>
+    <div class="field" id="editDobMonthDayRow" style="${m.dob_year_unknown ? '' : 'display:none;'}">
+      <label>Birthday (month and day only)</label>
+      <input type="text" id="editDobMonthDay" placeholder="MM-DD, e.g. 07-14" value="${m.dob_year_unknown ? escapeHtml(m.dob_month_day || '') : ''}">
+    </div>
+    <div class="field">
+      <label>Phone</label>
+      <input type="tel" id="editPhone" value="${escapeHtml(m.phone || '')}">
+    </div>
+    <div class="field">
+      <label>Area</label>
+      <input type="text" id="editArea" value="${escapeHtml(m.area || '')}">
+    </div>
+    <div class="field">
+      <label>Email</label>
+      <input type="email" id="editEmail" value="${escapeHtml(m.email || '')}">
+    </div>
+    <div class="field-err" id="editMemberErr"></div>
+    <div class="modal-actions">
+      <button class="btn-ghost" onclick="cancelEditMemberMode()">Cancel</button>
+      <button class="btn-primary" id="editMemberSubmitBtn" onclick="submitEditMember()">Save changes</button>
+    </div>`;
+}
+
+function onEditDobYearUnknownChange(){
+  const yearUnknown = document.getElementById('editDobYearUnknown').checked;
+  document.getElementById('editDob').disabled = yearUnknown;
+  document.getElementById('editDobMonthDayRow').style.display = yearUnknown ? 'block' : 'none';
+  if(yearUnknown){
+    document.getElementById('editDob').value = '';
+  }else{
+    document.getElementById('editDobMonthDay').value = '';
+  }
+}
+
+function enterEditMemberMode(){
+  EDIT_MODE = true;
+  renderMemberDetailBody();
+}
+
+function cancelEditMemberMode(){
+  EDIT_MODE = false;
+  renderMemberDetailBody();
+}
+
+async function submitEditMember(){
+  const errEl = document.getElementById('editMemberErr');
+  const btn = document.getElementById('editMemberSubmitBtn');
+  errEl.innerHTML = '';
+
+  const full_name = document.getElementById('editFullName').value.trim();
+  if(!full_name){
+    errEl.innerHTML = errIcon('Full name cannot be empty.');
+    return;
+  }
+
+  setBtnLoading(btn, true);
+  try{
+    const dobYearUnknown = document.getElementById('editDobYearUnknown').checked;
+    const body = {
+      full_name,
+      phone: document.getElementById('editPhone').value.trim() || null,
+      area: document.getElementById('editArea').value.trim() || null,
+      email: document.getElementById('editEmail').value.trim() || null,
+    };
+    // Mutually exclusive on the server (see _parse_dob_fields /
+    // update_member's own dedicated dob_month_day block) -- send
+    // exactly one of the two, matching whichever mode the checkbox
+    // currently reflects, not both.
+    if(dobYearUnknown){
+      body.dob_month_day = document.getElementById('editDobMonthDay').value.trim() || null;
+    }else{
+      body.date_of_birth = document.getElementById('editDob').value || null;
+    }
+    const updated = await api('/members/' + DETAIL_MEMBER.id, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    });
+    DETAIL_MEMBER = updated;
+    document.getElementById('detailName').textContent = updated.full_name;
+    EDIT_MODE = false;
+    renderMemberDetailBody();
+    // Unconditional, matching the pattern already proven for role
+    // actions -- the roster, birthdays list, and anywhere else a
+    // corrected name/phone/dob appears should reflect it immediately,
+    // not only if the person happens to already be on that page.
+    loadMembers();
+    if(document.getElementById('page-birthdays').classList.contains('active')) loadBirthdays();
+  }catch(e){
+    errEl.innerHTML = errIcon(e.message);
+  }finally{
+    setBtnLoading(btn, false);
+  }
+}
+
+function closeMemberDetail(){
+  document.getElementById('memberDetailModal').classList.remove('active');
+  DETAIL_MEMBER = null;
+  EDIT_MODE = false;
+}
+
+/* -------- Role management actions (shared by detail modal + Role management page) -------- */
+
+function renderRoleActions(m){
+  // The Head Admin is fully protected: no action here can ever
+  // target them, so show an explanatory note instead of buttons —
+  // matches the server-side guards in promote/demote/suspend exactly,
+  // rather than showing buttons that would just 403 on click.
+  if(m.is_head_admin){
+    return `<div class="head-admin-note">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2l2.4 5.5L20 8.3l-4 4 1 5.7L12 15.5 7 18l1-5.7-4-4 5.6-.8L12 2z"/></svg>
+      This is the Head Admin — the account's role and status can't be changed.
+    </div>`;
+  }
+  if(m.role === 'child'){ return ''; } // no role actions apply to children
+
+  const actions = [];
+  if(ME.is_head_admin && m.role !== 'admin'){
+    actions.push(`<button class="btn-secondary" onclick="doPromoteToAdmin(${m.id})">Promote to admin</button>`);
+  }
+  if(ME.is_head_admin && m.role === 'admin'){
+    actions.push(`<button class="btn-secondary" onclick="doDemoteAdmin(${m.id})">Demote from admin</button>`);
+  }
+  if(ME.role === 'admin'){
+    if(m.membership_status === 'active'){
+      actions.push(`<button class="btn-danger" onclick="doSuspendUser(${m.id})">Suspend</button>`);
+    }else{
+      actions.push(`<button class="btn-primary" style="width:auto;" onclick="doRestoreUser(${m.id})">Restore</button>`);
+    }
+  }
+
+  if(actions.length === 0) return '';
+  return `<div class="role-actions" id="roleActionsErrWrap">${actions.join('')}</div><div class="field-err" id="roleActionErr"></div>`;
+}
+
+async function doPromoteToAdmin(memberId){
+  const errEl = document.getElementById('roleActionErr');
+  if(errEl) errEl.innerHTML = '';
+  try{
+    await api('/admin/promote-to-admin', { method: 'POST', body: JSON.stringify({ member_id: memberId }) });
+    await openMemberDetail(memberId); // refresh the modal with the new role/actions
+    // Unconditional, matching how submitRegisterMember() always calls
+    // loadMembers() regardless of the active page. The old version only
+    // refreshed Role management if you were already standing on it --
+    // so suspending someone from the Members page left Role management
+    // and the Audit log showing a stale snapshot from initial login
+    // the next time you navigated there, since showPage() itself is a
+    // pure visibility toggle with no reload of its own.
+    loadMembers();
+    loadRoleMgmt();
+    loadAuditLog();
+  }catch(e){
+    if(errEl) errEl.innerHTML = errIcon(e.message);
+  }
+}
+
+async function doDemoteAdmin(memberId){
+  const errEl = document.getElementById('roleActionErr');
+  if(errEl) errEl.innerHTML = '';
+  try{
+    await api('/admin/demote-admin', { method: 'POST', body: JSON.stringify({ member_id: memberId, new_role: 'adult' }) });
+    await openMemberDetail(memberId);
+    loadMembers();
+    loadRoleMgmt();
+    loadAuditLog();
+  }catch(e){
+    if(errEl) errEl.innerHTML = errIcon(e.message);
+  }
+}
+
+async function doSuspendUser(memberId){
+  const errEl = document.getElementById('roleActionErr');
+  if(errEl) errEl.innerHTML = '';
+  try{
+    await api('/admin/suspend-user', { method: 'POST', body: JSON.stringify({ member_id: memberId }) });
+    await openMemberDetail(memberId);
+    loadMembers();
+    loadRoleMgmt();
+    loadAuditLog();
+  }catch(e){
+    if(errEl) errEl.innerHTML = errIcon(e.message);
+  }
+}
+
+async function doRestoreUser(memberId){
+  const errEl = document.getElementById('roleActionErr');
+  if(errEl) errEl.innerHTML = '';
+  try{
+    await api('/admin/restore-user', { method: 'POST', body: JSON.stringify({ member_id: memberId }) });
+    await openMemberDetail(memberId);
+    loadMembers();
+    loadRoleMgmt();
+    loadAuditLog();
+  }catch(e){
+    if(errEl) errEl.innerHTML = errIcon(e.message);
+  }
+}
+
+/* -------- Role management page (Option 3): table of admins/leaders with inline controls -------- */
+
+let ROLE_MGMT_MEMBERS = [];
+
+async function loadRoleMgmt(){
+  const el = document.getElementById('roleMgmtRows');
+  try{
+    const members = await api('/members?include_inactive=true');
+    // Admins and leaders only -- this page is for managing the
+    // people who hold elevated roles, not the full roster (that's
+    // what the Members page is for). include_inactive=true is what
+    // makes a suspended leader/admin still show up here, since
+    // suspending doesn't change their role and the default /members
+    // call (used everywhere else) filters them out entirely.
+    ROLE_MGMT_MEMBERS = members.filter(m => m.role === 'admin' || m.role === 'leader');
+    renderRoleMgmtRows();
+  }catch(e){
+    el.innerHTML = emptyState('Could not load', e.message);
+  }
+}
+
+function renderRoleMgmtRows(){
+  const el = document.getElementById('roleMgmtRows');
+  const q = (document.getElementById('roleMgmtSearch').value || '').trim().toLowerCase();
+  const filtered = q ? ROLE_MGMT_MEMBERS.filter(m => m.full_name.toLowerCase().includes(q)) : ROLE_MGMT_MEMBERS;
+
+  if(ROLE_MGMT_MEMBERS.length === 0){
+    el.innerHTML = emptyState('No admins or leaders yet', 'Promote a member to leader or admin to see them here.');
+    return;
+  }
+  if(filtered.length === 0){
+    el.innerHTML = emptyState('No matches', 'Nobody matches "' + escapeHtml(q) + '".');
+    return;
+  }
+
+  el.innerHTML = `<div class="ledger">` + filtered.map(m => {
+    const isHead = m.is_head_admin;
+    let actionsHtml;
+    if(isHead){
+      actionsHtml = `<span class="led-meta">Head Admin</span>`;
+    }else{
+      const btns = [];
+      if(m.role !== 'admin'){
+        btns.push(`<button class="btn-secondary" onclick="doPromoteToAdmin(${m.id})">Promote</button>`);
+      }else{
+        btns.push(`<button class="btn-secondary" onclick="doDemoteAdmin(${m.id})">Demote</button>`);
+      }
+      if(m.membership_status === 'active'){
+        btns.push(`<button class="btn-danger" onclick="doSuspendUser(${m.id})">Suspend</button>`);
+      }else{
+        btns.push(`<button class="btn-primary" style="width:auto;" onclick="doRestoreUser(${m.id})">Restore</button>`);
+      }
+      actionsHtml = `<div class="role-mgmt-actions">${btns.join('')}</div>`;
+    }
+    return `
+      <div class="role-mgmt-row" onclick="openMemberDetail(${m.id})" style="cursor:pointer;">
+        <div>
+          <div class="led-name">${escapeHtml(m.full_name)}${isHead ? ' <span class="pill senior">Head Admin</span>' : ''}</div>
+          <div class="led-meta">${m.membership_status === 'active' ? 'Active' : 'Suspended'}</div>
+        </div>
+        <div><span class="pill role-${m.role}">${m.role.charAt(0).toUpperCase() + m.role.slice(1)}</span></div>
+        <div onclick="event.stopPropagation()">${actionsHtml}</div>
+      </div>`;
+  }).join('') + `</div>`;
+}
+
+/* -------- Audit log page (Option 2) -------- */
+
+async function loadAuditLog(){
+  const el = document.getElementById('auditLogRows');
+  try{
+    const logs = await api('/admin/audit-log');
+    if(logs.length === 0){
+      el.innerHTML = emptyState('No actions logged yet', 'Promotions, demotions, suspensions, and restores will appear here.');
+      return;
+    }
+    const actionLabels = {
+      promote_admin: 'Promoted to admin',
+      demote_admin: 'Demoted from admin',
+      suspend_user: 'Suspended',
+      restore_user: 'Restored',
+    };
+    el.innerHTML = `<div class="ledger">` + logs.map(l => {
+      const label = actionLabels[l.action] || l.action;
+      const when = new Date(l.created_at).toLocaleString();
+      return `
+        <div class="audit-row">
+          <div>
+            <div class="audit-action">${escapeHtml(label)}</div>
+            <div class="audit-change">${escapeHtml(l.old_value || '—')} → ${escapeHtml(l.new_value || '—')}</div>
+          </div>
+          <div class="led-meta">${escapeHtml(l.actor_name || 'Unknown')} → ${escapeHtml(l.target_name || 'Unknown')}</div>
+          <div class="audit-time">${escapeHtml(when)}</div>
+        </div>`;
+    }).join('') + `</div>`;
+  }catch(e){
+    el.innerHTML = emptyState('Could not load audit log', e.message);
+  }
+}
+
+
+function toggleMemberGroup(key){
+  if(COLLAPSED_GROUPS.has(key)) COLLAPSED_GROUPS.delete(key);
+  else COLLAPSED_GROUPS.add(key);
+  renderMemberGroups();
+}
+
+/* -------- Register member modal -------- */
+function openRegisterModal(){
+  document.getElementById('regFullName').value = '';
+  document.getElementById('regRole').value = 'adult';
+  document.getElementById('regDob').value = '';
+  document.getElementById('regDobYearUnknown').checked = false;
+  document.getElementById('regDobMonthDay').value = '';
+  document.getElementById('regDobMonthDayRow').style.display = 'none';
+  document.getElementById('regPhone').value = '';
+  document.getElementById('regArea').value = '';
+  document.getElementById('regEmail').value = '';
+  document.getElementById('regPassword').value = '';
+  document.getElementById('regErr').innerHTML = '';
+  document.getElementById('regDuplicateWarning').style.display = 'none';
+  document.getElementById('regDuplicateWarning').innerHTML = '';
+  REG_DUPLICATE_ACKNOWLEDGED = false;
+  REG_DUPLICATE_IS_STRONG = false;
+
+  const cellSel = document.getElementById('regCellId');
+  cellSel.innerHTML = '<option value="">Unassigned</option>' +
+    ALL_CELLS.map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('');
+
+  const guardianSel = document.getElementById('regGuardianId');
+  const guardianEligible = ALL_MEMBERS.filter(m => m.role === 'adult' || m.role === 'leader' || m.role === 'admin');
+  guardianSel.innerHTML = guardianEligible.length
+    ? guardianEligible.map(m => `<option value="${m.id}">${escapeHtml(m.full_name)}</option>`).join('')
+    : '<option value="">No eligible adult on record yet</option>';
+
+  onRegRoleChange();
+  document.getElementById('registerModal').classList.add('active');
+}
+
+function closeRegisterModal(){
+  document.getElementById('registerModal').classList.remove('active');
+}
+
+function onRegRoleChange(){
+  const isChild = document.getElementById('regRole').value === 'child';
+  document.getElementById('regGuardianField').style.display = isChild ? 'block' : 'none';
+  document.getElementById('regPasswordField').style.display = isChild ? 'none' : 'block';
+}
+
+function onRegDobYearUnknownChange(){
+  const yearUnknown = document.getElementById('regDobYearUnknown').checked;
+  document.getElementById('regDob').disabled = yearUnknown;
+  document.getElementById('regDobMonthDayRow').style.display = yearUnknown ? 'flex' : 'none';
+  if(yearUnknown){
+    document.getElementById('regDob').value = '';
+  }else{
+    document.getElementById('regDobMonthDay').value = '';
+  }
+  onRegDuplicateCheckInput();
+}
+
+/* -------- Live duplicate-name warning on the register-member form --------
+   Mirrors the physical-attendance-book failure mode the person described:
+   the same person written into the book more than once by accident. This
+   is a WARNING, not a block -- two different real people are allowed to
+   share a name (father/namesake son, two unrelated members with a common
+   name), so the person is always able to acknowledge and submit anyway.
+   Only the server-enforced email-uniqueness check in register_member is a
+   hard block; this is not that. */
+let REG_DUPLICATE_ACKNOWLEDGED = false;
+let REG_DUPLICATE_IS_STRONG = false;
+let regDuplicateCheckTimer = null;
+let regDuplicateCheckSeq = 0;
+
+function onRegDuplicateCheckInput(){
+  // Editing any of these fields again after a warning was shown and
+  // dismissed means the person is still actively changing what they're
+  // about to submit -- re-arm the warning rather than trusting an
+  // acknowledgment given for a possibly-different name/phone/dob combo.
+  REG_DUPLICATE_ACKNOWLEDGED = false;
+
+  clearTimeout(regDuplicateCheckTimer);
+  regDuplicateCheckTimer = setTimeout(runRegDuplicateCheck, 400);
+}
+
+async function runRegDuplicateCheck(){
+  const warnEl = document.getElementById('regDuplicateWarning');
+  const full_name = document.getElementById('regFullName').value.trim();
+
+  if(!full_name){
+    warnEl.style.display = 'none';
+    warnEl.innerHTML = '';
+    return;
+  }
+
+  const phone = document.getElementById('regPhone').value.trim();
+  // check-duplicate's date_of_birth param expects a full ISO date and
+  // can't parse "MM-DD" -- when year-unknown mode is active there's no
+  // full date to send, so the duplicate check simply runs without a
+  // dob signal for that entry (falls back to name+phone matching only,
+  // same as anyone who left date of birth blank normally).
+  const date_of_birth = document.getElementById('regDobYearUnknown').checked
+    ? ''
+    : document.getElementById('regDob').value;
+
+  // Guards against a slow earlier request resolving after a faster later
+  // one and clobbering the warning with stale results -- e.g. typing
+  // "Chidi" then quickly finishing "Chidinma Okafor" before the first
+  // request for "Chidi" has come back.
+  const mySeq = ++regDuplicateCheckSeq;
+
+  const params = new URLSearchParams({ full_name });
+  if(phone) params.set('phone', phone);
+  if(date_of_birth) params.set('date_of_birth', date_of_birth);
+
+  let data;
+  try{
+    data = await api('/members/check-duplicate?' + params.toString());
+  }catch(e){
+    // Silent on failure -- this is a helpful nudge, not a required step,
+    // and a network hiccup here shouldn't block or alarm someone who's
+    // just trying to register a member.
+    return;
+  }
+  if(mySeq !== regDuplicateCheckSeq) return;
+
+  if(!data.matches || data.matches.length === 0){
+    warnEl.style.display = 'none';
+    warnEl.innerHTML = '';
+    REG_DUPLICATE_IS_STRONG = false;
+    return;
+  }
+
+  const REASON_LABEL = {
+    name_dob: 'same name and date of birth',
+    name_phone: 'same name and phone number',
+    name_only: 'same name',
+  };
+  const strongestLabel = m => REASON_LABEL[m.match_reasons[0]] || 'same name';
+  const isStrong = data.matches.some(m => m.match_reasons.includes('name_dob') || m.match_reasons.includes('name_phone'));
+  REG_DUPLICATE_IS_STRONG = isStrong;
+
+  const rows = data.matches.map(m => `
+    <div style="display:flex; justify-content:space-between; align-items:center; padding:6px 0; border-top:1px solid var(--line); font-size:12.5px;">
+      <span>
+        <b>${escapeHtml(m.full_name)}</b>
+        <span style="color:var(--slate);"> · ${escapeHtml(strongestLabel(m))}</span>
+        ${m.cell_name ? ` <span style="color:var(--slate);">· ${escapeHtml(m.cell_name)}</span>` : ''}
+      </span>
+      <span style="color:var(--slate); white-space:nowrap;">${m.joined_date ? 'Joined ' + escapeHtml(m.joined_date) : ''}</span>
+    </div>`).join('');
+
+  warnEl.style.display = 'block';
+  warnEl.innerHTML = `
+    <div style="background:var(--clay-soft); border:1px solid var(--clay); border-radius:8px; padding:12px 14px;">
+      <div style="display:flex; align-items:flex-start; gap:8px;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="var(--clay)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:18px; height:18px; flex-shrink:0; margin-top:1px;"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        <div style="flex:1;">
+          <div style="font-weight:600; font-size:13px;">
+            ${isStrong ? 'This looks like someone already on the roster' : 'Someone with this name is already on the roster'}
+          </div>
+          <div class="led-meta" style="margin-top:2px;">
+            ${isStrong
+              ? 'Double-check before registering — this may create a duplicate entry for the same person.'
+              : 'This could be a different person with the same name, or a duplicate entry. Worth a quick check.'}
+          </div>
+          ${rows}
+          <label style="display:flex; align-items:center; gap:7px; margin-top:10px; font-size:12.5px; cursor:pointer;">
+            <input type="checkbox" id="regDuplicateAckCheck" onchange="REG_DUPLICATE_ACKNOWLEDGED = this.checked" style="width:auto; margin:0;">
+            This is a different person — register anyway
+          </label>
+        </div>
+      </div>
+    </div>`;
+}
+
+async function submitRegisterMember(){
+  const errEl = document.getElementById('regErr');
+  const btn = document.getElementById('regSubmitBtn');
+  errEl.innerHTML = '';
+
+  const full_name = document.getElementById('regFullName').value.trim();
+  const role = document.getElementById('regRole').value;
+  const dobYearUnknown = document.getElementById('regDobYearUnknown').checked;
+  const date_of_birth = dobYearUnknown ? null : (document.getElementById('regDob').value || null);
+  const dob_month_day = dobYearUnknown ? document.getElementById('regDobMonthDay').value.trim() || null : null;
+  // Only meaningful for children (see onRegRoleChange, which hides
+  // this field entirely for every other role). Reading it unconditionally
+  // meant a hidden <select>'s auto-selected first option -- whoever
+  // happened to be first in the eligible-guardian list -- got silently
+  // sent and stored as the guardian for adults, teens, leaders, and
+  // admins, none of whom should ever have one.
+  const guardian_id = role === 'child' ? (document.getElementById('regGuardianId').value || null) : null;
+  const phone = document.getElementById('regPhone').value.trim() || null;
+  const area = document.getElementById('regArea').value.trim() || null;
+  const email = document.getElementById('regEmail').value.trim() || null;
+  const cell_id = document.getElementById('regCellId').value || null;
+  const password = document.getElementById('regPassword').value || null;
+
+  if(!full_name){ errEl.innerHTML = errIcon('Enter a full name.'); return; }
+  if(role === 'child' && !guardian_id){ errEl.innerHTML = errIcon('Children need a guardian selected.'); return; }
+  if(dobYearUnknown && dob_month_day && !/^\d{2}-\d{2}$/.test(dob_month_day)){
+    errEl.innerHTML = errIcon('Birthday should be in MM-DD format, e.g. 07-14.');
+    return;
+  }
+
+  // A fast submit right after typing could beat the debounced live
+  // check to the punch (it waits 400ms before firing) -- run it once
+  // more, synchronously, right before submitting, so a quick click
+  // can't slip past a warning that simply hasn't rendered yet.
+  clearTimeout(regDuplicateCheckTimer);
+  await runRegDuplicateCheck();
+  if(REG_DUPLICATE_IS_STRONG && !REG_DUPLICATE_ACKNOWLEDGED){
+    errEl.innerHTML = errIcon('This looks like a possible duplicate. Check the box above if this is really a different person.');
+    document.getElementById('regDuplicateWarning').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    return;
+  }
+
+  setBtnLoading(btn, true);
+  try{
+    await api('/members/register', {
+      method: 'POST',
+      body: JSON.stringify({
+        full_name, role, date_of_birth, dob_month_day, guardian_id,
+        phone, area, email, cell_id, password,
+      }),
+    });
+    closeRegisterModal();
+    loadMembers();
+  }catch(e){
+    errEl.innerHTML = errIcon(e.message || 'Could not register this member.');
+  }finally{
+    setBtnLoading(btn, false);
+  }
+}
+
+/* ================= Admin overview ================= */
+async function loadAdminOverview(){
+  const statsEl = document.getElementById('adminStats');
+  const ledgerEl = document.getElementById('adminLedger');
+  try{
+    const overview = await api('/admin/follow-up/overview');
+    document.getElementById('adminSub').textContent = overview.service_date
+      ? 'Week of ' + overview.service_date : 'No service recorded yet.';
+    statsEl.innerHTML = `
+      <div class="stat-card"><div class="stat-val">${overview.total_absent||0}</div><div class="stat-label">Absent this week</div></div>
+      <div class="stat-card clay"><div class="stat-val">${overview.pending||0}</div><div class="stat-label">Pending calls</div></div>
+      <div class="stat-card green"><div class="stat-val">${overview.completed||0}</div><div class="stat-label">Calls completed</div></div>
+      <div class="stat-card gold"><div class="stat-val">${overview.escalated||0}</div><div class="stat-label">Escalated</div></div>`;
+
+    const all = await api('/admin/follow-up/all');
+    ledgerEl.innerHTML = all.length === 0
+      ? emptyState('Nothing pending church-wide', 'Every assignment has been worked.')
+      : all.map(rowForAssignment).join('');
+  }catch(e){
+    statsEl.innerHTML = '';
+    ledgerEl.innerHTML = emptyState('Could not load overview', e.message);
+  }
+}
+
+/* ================= Leader accountability ================= */
+async function loadLeaderAccountability(){
+  const el = document.getElementById('leaderLedger');
+  try{
+    const leaders = await api('/admin/leaders/overview');
+    if(leaders.length === 0){
+      el.innerHTML = emptyState('No leaders on record', 'Leader and admin accounts will appear here once added.');
+      return;
+    }
+    el.innerHTML = leaders.map(l => {
+      const zone = l.escalated_to_senior_leadership ? 'zone-senior' : l.flagged ? 'zone-flag' : 'zone-ok';
+      const pillLabel = l.escalated_to_senior_leadership ? 'Senior notified' : l.flagged ? 'Flagged' : 'On track';
+      const pillClass = l.escalated_to_senior_leadership ? 'senior' : l.flagged ? 'flag' : 'ok';
+      const initials = escapeHtml(l.leader_name).split(' ').filter(Boolean).slice(0,2).map(w => w[0]).join('').toUpperCase();
+      return `
+      <div class="leader-card ${zone}">
+        <span class="card-pill ${pillClass}">${pillLabel}</span>
+        <div class="leader-mark">${initials}</div>
+        <div class="card-name">${escapeHtml(l.leader_name)}</div>
+        <div class="card-meta">${escapeHtml(l.cell_name || l.role)}</div>
+        <div class="card-facts">
+          <div class="card-fact"><b>${l.consecutive_absences}</b>&nbsp;consecutive absence${l.consecutive_absences === 1 ? '' : 's'}</div>
+          <div class="card-fact">${l.last_service_date ? 'Last seen <b>' + escapeHtml(l.last_service_date) + '</b>' : 'No record yet'}</div>
+        </div>
+      </div>`;
+    }).join('');
+  }catch(e){
+    el.innerHTML = emptyState('Could not load leader accountability', e.message);
+  }
+}
+
+/* ================= Statistics ================= */
+let LAST_STATS_RESPONSE = null; // cached so the chart-type dropdown can re-render without refetching
+
+async function loadStatistics(){
+  const cardsEl = document.getElementById('statsCards');
+  const trendEl = document.getElementById('statsTrend');
+  const range = document.getElementById('statsRangeSelect').value;
+  try{
+    const s = await api('/admin/statistics?range=' + encodeURIComponent(range));
+    LAST_STATS_RESPONSE = s;
+
+    document.getElementById('statsSub').textContent = s.latest_service_date
+      ? 'As of ' + s.latest_service_date : 'No service recorded yet.';
+
+    cardsEl.innerHTML = `
+      <div class="stat-card"><div class="stat-val">${s.total_members}</div><div class="stat-label">Active members</div></div>
+      <div class="stat-card green"><div class="stat-val">${s.total_cells}</div><div class="stat-label">Cells</div></div>
+      <div class="stat-card clay"><div class="stat-val">${s.latest_attendance.present}</div><div class="stat-label">Present, last service</div></div>
+      <div class="stat-card gold"><div class="stat-val">${s.open_follow_ups}</div><div class="stat-label">Open follow-ups</div></div>`;
+
+    renderStatsTrend();
+  }catch(e){
+    cardsEl.innerHTML = '';
+    trendEl.innerHTML = emptyState('Could not load statistics', e.message);
+  }
+}
+
+function renderStatsTrend(){
+  const trendEl = document.getElementById('statsTrend');
+  const s = LAST_STATS_RESPONSE;
+  if(!s) return; // loadStatistics hasn't completed yet; nothing to render
+
+  const byRole = s.by_role || {};
+  const roleRow = `
+    <div class="stat-row" style="margin-top:0;">
+      <div class="stat-card"><div class="stat-val">${byRole.adult||0}</div><div class="stat-label">Adults</div></div>
+      <div class="stat-card"><div class="stat-val">${byRole.teen||0}</div><div class="stat-label">Teens</div></div>
+      <div class="stat-card"><div class="stat-val">${byRole.child||0}</div><div class="stat-label">Children</div></div>
+      <div class="stat-card"><div class="stat-val">${byRole.leader||0}</div><div class="stat-label">Leaders</div></div>
+      <div class="stat-card"><div class="stat-val">${byRole.admin||0}</div><div class="stat-label">Admins</div></div>
+    </div>`;
+
+  const visitorSummary = `
+    <div class="led-meta" style="margin-top:10px;">
+      ${s.total_visitors} visitor${s.total_visitors===1?'':'s'} total, ${s.converted_visitors} converted to member${s.converted_visitors===1?'':'s'}.
+    </div>`;
+
+  if(s.attendance_trend.length === 0){
+    trendEl.innerHTML = roleRow + emptyState('No attendance recorded yet', 'The trend will appear once a service has attendance submitted.') + visitorSummary;
+    return;
+  }
+
+  const chartType = document.getElementById('statsChartType').value;
+  const chartHtml = chartType === 'line' ? buildLineChart(s.attendance_trend) : buildBarChart(s.attendance_trend);
+
+  trendEl.innerHTML = roleRow + `
+    <div class="stat-card" style="margin-top:14px; padding:18px 14px;">
+      ${chartHtml}
+      <div class="led-meta" style="margin-top:8px; text-align:center;">Click a point to see who was present or absent.</div>
+    </div>
+    <div id="statsAttendeesPanel" style="margin-top:10px;"></div>` + visitorSummary;
+}
+
+function buildBarChart(trend){
+  const maxVal = Math.max(...trend.map(t => t.present + t.absent), 1);
+  const bars = trend.map(t => {
+    const total = t.present + t.absent;
+    const presentPct = total ? Math.round((t.present / total) * 100) : 0;
+    const barHeight = Math.max(6, Math.round((total / maxVal) * 90));
+    return `
+      <div style="display:flex; flex-direction:column; align-items:center; gap:6px; flex:1; min-width:0; cursor:pointer;" onclick="showStatsAttendees(${t.service_id})" title="Click to see who attended">
+        <div style="font-size:11px; color:var(--slate);">${t.present}</div>
+        <div style="width:100%; max-width:34px; height:90px; display:flex; align-items:flex-end; background:var(--parchment-dim); border-radius:6px; overflow:hidden;">
+          <div style="width:100%; height:${barHeight}%; background:var(--clay); border-radius:6px 6px 0 0;" title="${escapeHtml(t.date)}: ${t.present} present, ${t.absent} absent (${presentPct}%)"></div>
+        </div>
+        <div style="font-size:10.5px; color:var(--slate); white-space:nowrap;">${t.date.slice(5)}</div>
+      </div>`;
+  }).join('');
+  return `<div style="display:flex; align-items:flex-end; gap:8px; overflow-x:auto;">${bars}</div>`;
+}
+
+function buildLineChart(trend){
+  // Simple inline SVG line chart -- no external library, matches the
+  // dependency-free style of the rest of this file's charting.
+  const w = Math.max(320, trend.length * 40);
+  const h = 110;
+  const padTop = 14, padBottom = 20;
+  const maxVal = Math.max(...trend.map(t => t.present), 1);
+  const stepX = trend.length > 1 ? (w - 20) / (trend.length - 1) : 0;
+
+  const points = trend.map((t, i) => {
+    const x = 10 + i * stepX;
+    const y = padTop + (1 - (t.present / maxVal)) * (h - padTop - padBottom);
+    return { x, y, t };
+  });
+
+  const pathD = points.map((p, i) => (i === 0 ? 'M' : 'L') + p.x.toFixed(1) + ',' + p.y.toFixed(1)).join(' ');
+
+  // r=9 transparent hit-circle layered under the visible r=3.5 dot --
+  // the visible dot alone is too small a tap target, especially on
+  // mobile, so clicks near-but-not-exactly-on the dot would otherwise
+  // silently do nothing.
+  const circles = points.map(p => `
+    <circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="9" fill="transparent" style="cursor:pointer;" onclick="showStatsAttendees(${p.t.service_id})">
+      <title>${escapeHtml(p.t.date)}: ${p.t.present} present, ${p.t.absent} absent — click for names</title>
+    </circle>
+    <circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3.5" fill="var(--clay)" style="pointer-events:none;"></circle>`).join('');
+
+  const labels = points.map((p, i) => {
+    // Skip labels on dense charts so they don't overlap -- show every Nth
+    if(trend.length > 15 && i % Math.ceil(trend.length / 15) !== 0) return '';
+    return `<text x="${p.x.toFixed(1)}" y="${h - 4}" font-size="9.5" fill="var(--slate)" text-anchor="middle">${escapeHtml(p.t.date.slice(5))}</text>`;
+  }).join('');
+
+  return `
+    <div style="overflow-x:auto;">
+      <svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" style="display:block;">
+        <path d="${pathD}" fill="none" stroke="var(--clay)" stroke-width="2"/>
+        ${circles}
+        ${labels}
+      </svg>
+    </div>`;
+}
+
+async function showStatsAttendees(serviceId){
+  const panel = document.getElementById('statsAttendeesPanel');
+  if(!panel || !serviceId) return;
+  panel.innerHTML = `<div class="stat-card"><div class="led-meta">Loading…</div></div>`;
+  panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  try{
+    const data = await api('/admin/statistics/service/' + serviceId + '/attendees');
+    const row = (r, present) => `
+      <div style="display:flex; justify-content:space-between; align-items:center; padding:7px 0; border-top:1px solid var(--line); font-size:12.5px;">
+        <span>${escapeHtml(r.member_name || 'Unknown')}${r.cell_name && r.cell_name !== 'Unassigned' ? ' <span style="color:var(--slate);">· ' + escapeHtml(r.cell_name) + '</span>' : ''}</span>
+        <span class="card-pill ${present ? 'ok' : 'flag'}" style="position:static;">${present ? 'Present' : 'Absent'}</span>
+      </div>`;
+    panel.innerHTML = `
+      <div class="stat-card" style="padding:16px 14px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+          <div style="font-weight:600; font-size:13.5px;">${escapeHtml(data.service_name)} · ${escapeHtml(data.date)}</div>
+          <button class="btn-ghost" style="padding:4px 10px; font-size:12px;" onclick="document.getElementById('statsAttendeesPanel').innerHTML=''">Close</button>
+        </div>
+        <div class="led-meta" style="margin-bottom:6px;">${data.present.length} present, ${data.absent.length} absent</div>
+        ${data.present.length === 0 && data.absent.length === 0
+          ? '<div class="led-meta">No attendance recorded for this service.</div>'
+          : [...data.present.map(r => row(r, true)), ...data.absent.map(r => row(r, false))].join('')}
+      </div>`;
+  }catch(e){
+    panel.innerHTML = `<div class="stat-card"><div class="led-meta" style="color:var(--clay);">Could not load attendees: ${escapeHtml(e.message)}</div></div>`;
+  }
+}
+
+/* ================= Cell attendance trend ================= */
+async function loadCellAttendanceTrend(){
+  const el = document.getElementById('cellsAttendanceTrend');
+  if(!el) return; // element only exists once enterApp has rendered the page
+  try{
+    const cells = await api('/admin/cells/attendance-trend');
+    if(cells.length === 0){
+      el.innerHTML = emptyState('No cells yet', 'Create a cell to see its attendance trend here.');
+      return;
+    }
+    el.innerHTML = cells.map(cellTrendCard).join('');
+  }catch(e){
+    el.innerHTML = emptyState('Could not load cell attendance trend', e.message);
+  }
+}
+
+function cellTrendCard(cell){
+  const points = cell.trend.filter(t => t.percentage !== null);
+  const bodyHtml = points.length === 0
+    ? '<div class="led-meta">No attendance recorded for this cell yet.</div>'
+    : buildPercentageLineChart(points);
+  const latest = points.length ? points[points.length - 1] : null;
+  return `
+    <div class="stat-card" style="margin-bottom:12px; padding:16px 14px;">
+      <div style="display:flex; align-items:baseline; justify-content:space-between; margin-bottom:8px;">
+        <div class="led-name">${escapeHtml(cell.cell_name)}</div>
+        <div class="led-meta">${cell.leader_name ? 'Led by ' + escapeHtml(cell.leader_name) : 'Unassigned'}${latest ? ' · latest: ' + latest.percentage + '%' : ''}</div>
+      </div>
+      ${bodyHtml}
+    </div>`;
+}
+
+function buildPercentageLineChart(points){
+  // Fixed 0-100 scale, distinct from buildLineChart's raw-count scale --
+  // a small cell at 100% should not look smaller on the axis than a
+  // large cell at 50%, which a raw-count scale would do.
+  const w = Math.max(280, points.length * 36);
+  const h = 90;
+  const padTop = 10, padBottom = 18;
+  const stepX = points.length > 1 ? (w - 20) / (points.length - 1) : 0;
+
+  const plotted = points.map((pt, i) => {
+    const x = 10 + i * stepX;
+    const y = padTop + (1 - (pt.percentage / 100)) * (h - padTop - padBottom);
+    return { x, y, pt };
+  });
+
+  const pathD = plotted.map((p, i) => (i === 0 ? 'M' : 'L') + p.x.toFixed(1) + ',' + p.y.toFixed(1)).join(' ');
+  const circles = plotted.map(p => `
+    <circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3" fill="var(--green)">
+      <title>${escapeHtml(p.pt.date)}: ${p.pt.present}/${p.pt.total} present (${p.pt.percentage}%)</title>
+    </circle>`).join('');
+
+  return `
+    <div style="overflow-x:auto;">
+      <svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" style="display:block;">
+        <path d="${pathD}" fill="none" stroke="var(--green)" stroke-width="2"/>
+        ${circles}
+      </svg>
+    </div>`;
+}
+
+/* ================= Helpers ================= */
+function emptyState(title, sub){
+  return `<div class="empty">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="9"/><path d="M9 12l2 2 4-4"/></svg>
+    <b>${escapeHtml(title)}</b><p>${escapeHtml(sub)}</p>
+  </div>`;
+}
+function escapeHtml(s){
+  return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+/* ================= Theme ================= */
+function applyTheme(theme){
+  document.documentElement.setAttribute('data-theme', theme);
+  localStorage.setItem('neomap_theme', theme);
+  const iconPath = theme === 'dark'
+    ? '<path d="M21 12.5A9 9 0 1111.5 3a7 7 0 009.5 9.5z"/>'
+    : '<circle cx="12" cy="12" r="4.5"/><path d="M12 3v2M12 19v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M3 12h2M19 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4"/>';
+  const i1 = document.getElementById('themeIcon');
+  const i2 = document.getElementById('themeIconApp');
+  if(i1) i1.innerHTML = iconPath;
+  if(i2) i2.innerHTML = iconPath;
+}
+function toggleTheme(){
+  const current = document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
+  applyTheme(current === 'dark' ? 'light' : 'dark');
+}
+applyTheme(localStorage.getItem('neomap_theme') || 'light');
+
+/* ================= Boot ================= */
+if(TOKEN){
+  api('/auth/me').then(member => {
+    ME = member;
+    enterApp();
+  }).catch(() => logout());
+}
+</script>
+</body>
+</html>
