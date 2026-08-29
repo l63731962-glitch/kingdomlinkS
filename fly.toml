@@ -1,4 +1,4 @@
-app = "kingdomlinks-air-neomap"
+app = "kingdomlinks-air-neomap-10"
 primary_region = "lhr"
 
 [build]
