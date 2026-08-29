@@ -1,8 +1,6 @@
-# flyctl launch added from air_neomap/.gitignore
-air_neomap/**/__pycache__
-air_neomap/**/*.pyc
-air_neomap/**/*.db
-air_neomap/**/.env
-air_neomap/**/venv
-air_neomap/**/instance
-fly.toml
+__pycache__/
+*.pyc
+*.db
+.env
+venv/
+instance/
