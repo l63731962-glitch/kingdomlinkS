@@ -1,0 +1,6 @@
+flask
+flask_sqlalchemy
+pyjwt
+werkzeug
+gunicorn
+psycopg2-binary
