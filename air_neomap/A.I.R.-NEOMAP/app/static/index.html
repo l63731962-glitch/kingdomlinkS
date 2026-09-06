@@ -829,13 +829,39 @@ a{ color:inherit; }
 
 @media (max-width:760px){
   .sidebar{ display:none; }
-  .main{ padding:20px; max-width:none; }
+  .main{ padding:16px 14px 28px; max-width:none; }
+  .page-head{
+    flex-direction:column;
+    align-items:stretch;
+    gap:10px;
+  }
+  .page-head-actions{
+    flex-wrap:wrap;
+    width:100%;
+  }
+  .page-head-actions > *{
+    flex:1 1 100%;
+    min-width:0;
+  }
+  .member-search{ width:100%; min-width:0; }
   .ledger-row{ grid-template-columns:1fr; gap:6px; }
   .led-action{ display:flex; gap:8px; }
   .led-action select{ flex:1; }
   .led-action button{ width:auto; margin-top:0; padding:7px 14px; }
-  .stat-row{ grid-template-columns:repeat(2,1fr); }
+  .stat-row{ grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .leader-grid{ grid-template-columns:1fr; }
+  .leader-card{ padding:16px 16px 14px; }
+  .leader-card .card-name{ padding-right:0; }
   .leader-row{ grid-template-columns:1fr; gap:4px; }
+  .member-row{ grid-template-columns:1fr; gap:6px; }
+  .member-row:hover{ margin:0; padding:12px 4px; border-radius:0; }
+  .audit-row{ grid-template-columns:1fr; gap:4px; }
+  .role-mgmt-row{ grid-template-columns:1fr; gap:8px; }
+  .role-mgmt-actions{ justify-content:flex-start; }
+  .field-row{ grid-template-columns:1fr; }
+  .modal-box{ padding:18px 16px; }
+  .login-card{ max-width:100%; }
+  .btn-small{ width:100%; justify-content:center; }
 
   .mobile-topbar{
     display:flex; align-items:center; gap:12px;
