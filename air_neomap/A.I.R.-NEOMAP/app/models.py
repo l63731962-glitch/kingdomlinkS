@@ -242,6 +242,12 @@ class CellGroup(db.Model):
     meeting_day = db.Column(db.String(20))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
+    # Consecutive weeks with NO proof submitted at all (not even
+    # pending/rejected) -- incremented by
+    # cell_compliance_logic.check_and_flag_missed_weeks(), reset to 0
+    # by confirm_meeting_proof(). Mirrors Member.consecutive_absences.
+    consecutive_missed_weeks = db.Column(db.Integer, default=0)
+
     members = db.relationship(
         "Member", backref="cell", lazy=True, foreign_keys="Member.cell_id"
     )
@@ -255,6 +261,65 @@ class CellGroup(db.Model):
             "leader_name": self.leader.full_name if self.leader else None,
             "meeting_day": self.meeting_day,
             "member_count": len(self.members),
+            "consecutive_missed_weeks": self.consecutive_missed_weeks,
+        }
+
+
+class CellMeetingSchedule(db.Model):
+    """
+    One row per cell group: the recurring day/time the leader
+    commits to. Set when an admin creates or edits the cell leader,
+    not by the leader themselves -- this is an expectation set FOR
+    them, mirroring how follow_up_threshold is set at the church
+    level, not by the person being measured.
+    """
+    __tablename__ = "cell_meeting_schedules"
+
+    id = db.Column(db.Integer, primary_key=True)
+    cell_id = db.Column(db.Integer, db.ForeignKey("cell_groups.id"), nullable=False, unique=True)
+    day_of_week = db.Column(db.Integer, nullable=False)  # 0=Monday .. 6=Sunday
+    meeting_time = db.Column(db.String(10), nullable=False)  # "HH:MM AM/PM"
+    created_by = db.Column(db.Integer, db.ForeignKey("members.id"), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "cell_id": self.cell_id,
+            "day_of_week": self.day_of_week,
+            "meeting_time": self.meeting_time,
+        }
+
+
+class CellMeetingProof(db.Model):
+    """
+    One row per week's proof submission. Separate from the schedule
+    itself so history is preserved -- editing the schedule later
+    never rewrites what was actually submitted and confirmed in the
+    past, the same reasoning as AuditLog storing denormalized names.
+    """
+    __tablename__ = "cell_meeting_proofs"
+
+    id = db.Column(db.Integer, primary_key=True)
+    cell_id = db.Column(db.Integer, db.ForeignKey("cell_groups.id"), nullable=False)
+    submitted_by = db.Column(db.Integer, db.ForeignKey("members.id"), nullable=False)
+    meeting_date = db.Column(db.Date, nullable=False, default=date.today)
+    proof_url = db.Column(db.String(500), nullable=False)
+    proof_type = db.Column(db.String(10), nullable=False)  # "image" | "video"
+    status = db.Column(db.String(20), nullable=False, default="pending")  # pending | confirmed | rejected
+    confirmed_by = db.Column(db.Integer, db.ForeignKey("members.id"), nullable=True)
+    confirmed_at = db.Column(db.DateTime, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "cell_id": self.cell_id,
+            "meeting_date": self.meeting_date.isoformat(),
+            "proof_url": self.proof_url,
+            "proof_type": self.proof_type,
+            "status": self.status,
+            "confirmed_at": self.confirmed_at.isoformat() if self.confirmed_at else None,
         }
 
 class AttendanceRecord(db.Model):
