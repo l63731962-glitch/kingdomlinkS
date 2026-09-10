@@ -96,7 +96,7 @@ def _parse_dob_fields(data):
 @bp.route("/api/run-migration-consecutive-missed-weeks", methods=["POST"])
 def run_migration_consecutive_missed_weeks():
     secret = request.args.get("secret")
-    if secret != "changeme123":
+    if secret != "LIONEL_MESSI_10":
         return jsonify({"error": "Unauthorized"}), 401
 
     from sqlalchemy import text
