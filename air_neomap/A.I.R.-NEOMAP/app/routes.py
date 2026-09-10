@@ -1685,14 +1685,14 @@ def api_get_pending_proofs():
     proofs = get_pending_proofs_for_review(church_id)
     return jsonify([p.to_dict() for p in proofs]), 200
 
-
 @bp.route("/cells/<int:cell_id>/proof-history", methods=["GET"])
 @login_required
 def api_get_cell_history(cell_id):
     history = get_cell_compliance_history(cell_id)
     return jsonify([p.to_dict() for p in history]), 200
 
-@bp.route("/api/admin/run-migrations", methods=["POST"])
+
+@bp.route("/admin/run-migrations", methods=["POST"])
 @role_required(ROLE_ADMIN)
 def run_pending_migrations():
     from sqlalchemy import text
