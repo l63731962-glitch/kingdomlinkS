@@ -4,7 +4,7 @@ from app.database import db
 from app.models import (
     Member, Church, CellGroup, Service, Visitor, FollowUpAssignment,
     FollowUpTeamMember, NotificationLog, AttendanceRecord, AuditLog,
-    DOB_UNKNOWN_YEAR_SENTINEL,
+    DOB_UNKNOWN_YEAR_SENTINEL, CellMeetingSchedule, CellMeetingProof,
 )
 from app.auth import (
     login_required, role_required, church_scoped,
@@ -17,6 +17,11 @@ from app.attendance_logic import (
     get_cell_attendance_trend,
 )
 from app import engagement_logic
+from app.cell_compliance_logic import (
+    set_cell_schedule, submit_meeting_proof, confirm_meeting_proof,
+    reject_meeting_proof, get_pending_proofs_for_review,
+    get_cell_compliance_history,
+)
 
 bp = Blueprint("neomap", __name__, url_prefix="/api")
 
@@ -1601,3 +1606,88 @@ def my_notifications():
         .all()
     )
     return jsonify([n.to_dict() for n in logs])
+
+# ---------- Cell meeting compliance (schedule, proof, confirmation) ----------
+
+@bp.route("/cells/<int:cell_id>/schedule", methods=["POST"])
+@role_required(ROLE_ADMIN)
+def api_set_cell_schedule(cell_id):
+    data = request.get_json() or {}
+    day_of_week = data.get("day_of_week")
+    meeting_time = data.get("meeting_time")
+    if day_of_week is None or not meeting_time:
+        return jsonify({"error": "day_of_week and meeting_time are required"}), 400
+
+    schedule = set_cell_schedule(
+        cell_id=cell_id,
+        day_of_week=day_of_week,
+        meeting_time=meeting_time,
+        created_by_id=request.current_member["member_id"],
+    )
+    return jsonify(schedule.to_dict()), 200
+
+
+@bp.route("/cells/<int:cell_id>/schedule", methods=["GET"])
+@login_required
+def api_get_cell_schedule(cell_id):
+    schedule = CellMeetingSchedule.query.filter_by(cell_id=cell_id).first()
+    if not schedule:
+        return jsonify(None), 200
+    return jsonify(schedule.to_dict()), 200
+
+
+@bp.route("/cells/<int:cell_id>/proof", methods=["POST"])
+@role_required(ROLE_LEADER, ROLE_ADMIN)
+def api_submit_meeting_proof(cell_id):
+    data = request.get_json() or {}
+    proof_url = data.get("proof_url")
+    proof_type = data.get("proof_type")
+    if not proof_url or proof_type not in ("image", "video"):
+        return jsonify({"error": "proof_url and a valid proof_type ('image' or 'video') are required"}), 400
+
+    try:
+        proof = submit_meeting_proof(
+            cell_id=cell_id,
+            submitted_by_id=request.current_member["member_id"],
+            proof_url=proof_url,
+            proof_type=proof_type,
+        )
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+
+    return jsonify(proof.to_dict()), 201
+
+
+@bp.route("/cells/proof/<int:proof_id>/confirm", methods=["POST"])
+@role_required(ROLE_ADMIN)
+def api_confirm_meeting_proof(proof_id):
+    try:
+        proof = confirm_meeting_proof(proof_id, confirmed_by_id=request.current_member["member_id"])
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 404
+    return jsonify(proof.to_dict()), 200
+
+
+@bp.route("/cells/proof/<int:proof_id>/reject", methods=["POST"])
+@role_required(ROLE_ADMIN)
+def api_reject_meeting_proof(proof_id):
+    try:
+        proof = reject_meeting_proof(proof_id, confirmed_by_id=request.current_member["member_id"])
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 404
+    return jsonify(proof.to_dict()), 200
+
+
+@bp.route("/cells/proofs/pending", methods=["GET"])
+@role_required(ROLE_ADMIN)
+def api_get_pending_proofs():
+    church_id = request.current_member["church_id"]
+    proofs = get_pending_proofs_for_review(church_id)
+    return jsonify([p.to_dict() for p in proofs]), 200
+
+
+@bp.route("/cells/<int:cell_id>/proof-history", methods=["GET"])
+@login_required
+def api_get_cell_history(cell_id):
+    history = get_cell_compliance_history(cell_id)
+    return jsonify([p.to_dict() for p in history]), 200
