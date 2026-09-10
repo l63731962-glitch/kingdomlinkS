@@ -93,6 +93,27 @@ def _parse_dob_fields(data):
 
     return None, False
 
+@bp.route("/api/run-migration-consecutive-missed-weeks", methods=["POST"])
+def run_migration_consecutive_missed_weeks():
+    secret = request.args.get("secret")
+    if secret != "changeme123":
+        return jsonify({"error": "Unauthorized"}), 401
+
+    from sqlalchemy import text
+    result = db.session.execute(text("""
+        SELECT column_name FROM information_schema.columns
+        WHERE table_name = 'cell_groups'
+    """))
+    existing_columns = [row[0] for row in result]
+
+    if "consecutive_missed_weeks" in existing_columns:
+        return jsonify({"status": "already exists, skipped"})
+
+    db.session.execute(text(
+        "ALTER TABLE cell_groups ADD COLUMN consecutive_missed_weeks INTEGER NOT NULL DEFAULT 0"
+    ))
+    db.session.commit()
+    return jsonify({"status": "column added"})
 
 # ---------- AUTH ----------
 
