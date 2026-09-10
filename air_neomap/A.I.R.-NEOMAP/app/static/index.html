@@ -907,6 +907,7 @@ a{ color:inherit; }
   .mobile-drawer, .mobile-drawer-overlay{ display:none !important; }
 }
 </style>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
 
@@ -1548,12 +1549,49 @@ a{ color:inherit; }
       </div>
     </div>
 
+    <div class="field-row">
+      <div class="field">
+        <label>Compliance schedule day</label>
+        <select id="cellScheduleDay">
+          <option value="">Not tracked</option>
+          <option value="0">Monday</option>
+          <option value="1">Tuesday</option>
+          <option value="2">Wednesday</option>
+          <option value="3">Thursday</option>
+          <option value="4">Friday</option>
+          <option value="5">Saturday</option>
+          <option value="6">Sunday</option>
+        </select>
+        <div class="field-hint">The day this leader must submit proof of meeting by.</div>
+      </div>
+      <div class="field">
+        <label>Compliance schedule time</label>
+        <input type="text" id="cellScheduleTime" placeholder="e.g. 6:00 PM">
+      </div>
+    </div>
+
     <div class="field-err" id="cellErr"></div>
 
     <div class="modal-actions">
       <button class="btn-ghost" onclick="closeCreateCellModal()">Cancel</button>
       <button class="btn-primary" id="cellSubmitBtn" onclick="submitCreateCell()">Create cell</button>
     </div>
+  </div>
+</div>
+
+<!-- ============ CELL COMPLIANCE HISTORY MODAL ============ -->
+<div class="modal-overlay" id="complianceModal">
+  <div class="modal-box">
+    <div class="modal-head">
+      <div>
+        <div class="modal-title" id="complianceModalTitle">Proof history</div>
+        <div class="modal-sub">Confirm or reject each week's submitted proof.</div>
+      </div>
+      <button class="modal-close" onclick="closeComplianceModal()" aria-label="Close">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M18 6L6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div id="complianceModalBody"></div>
   </div>
 </div>
 
@@ -1709,6 +1747,32 @@ a{ color:inherit; }
 <script>
 /* ================= State ================= */
 const API = '/api';
+
+// Supabase Storage holds proof images/videos -- Render's own disk is
+// wiped on every deploy (same reason the database moved to Postgres),
+// so uploaded files need to live somewhere that survives a redeploy.
+// Replace these two placeholders with your actual project's values
+// (Supabase dashboard -> Project Settings -> API).
+const SUPABASE_URL = 'https://yzjpyetvuzkaiscrlpzb.supabase.co/rest/v1/ ';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl6anB5ZXR2dXprYWlzY3JscHpiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQwMjU0NzYsImV4cCI6MjA5OTYwMTQ3Nn0.RUhBu4D4FoLgrHbJR9hRS78TcBR1weCw0JUqEuPz4QY';
+const supabaseClient = window.supabase
+  ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+  : null;
+
+async function uploadProofToSupabase(file, cellId){
+  if(!supabaseClient){
+    throw new Error('Storage not configured — set SUPABASE_URL/SUPABASE_ANON_KEY.');
+  }
+  const ext = file.name.split('.').pop();
+  const path = `cell-${cellId}/${Date.now()}.${ext}`;
+  const { error: uploadError } = await supabaseClient.storage
+    .from('cell-meeting-proofs')
+    .upload(path, file);
+  if(uploadError) throw new Error(uploadError.message);
+
+  const { data } = supabaseClient.storage.from('cell-meeting-proofs').getPublicUrl(path);
+  return data.publicUrl;
+}
 let TOKEN = localStorage.getItem('neomap_token') || null;
 let ME = null;
 
@@ -2355,15 +2419,26 @@ function renderCells(){
     return;
   }
   const canReassignLeader = ME.role === 'admin'; // matches reassign_cell_leader's own admin-only gate
+  const isThisLeader = (c) => ME.role === 'leader' && c.leader_id === ME.id;
   el.innerHTML = ALL_CELLS.map(c => {
     const zone = c.member_count === 0 ? 'zone-flag' : 'zone-ok';
     const pillLabel = c.member_count === 0 ? 'Empty' : (c.member_count + ' member' + (c.member_count === 1 ? '' : 's'));
     const pillClass = c.member_count === 0 ? 'flag' : 'ok';
     const initials = escapeHtml(c.name).split(' ').filter(Boolean).slice(0,2).map(w => w[0]).join('').toUpperCase();
     const eligibleLeaders = ALL_MEMBERS.filter(m => m.role !== 'child' && m.id !== c.leader_id);
+
+    // Compliance strip: a leader missing consecutive weeks shows the
+    // same flag styling the rest of the app uses for zone-flag/ok,
+    // rather than inventing a new visual language for this one feature.
+    const missed = c.consecutive_missed_weeks || 0;
+    const complianceBadge = missed > 0
+      ? `<span class="card-pill flag" title="${missed} week${missed===1?'':'s'} with no proof submitted">${missed} missed</span>`
+      : '';
+
     return `
     <div class="leader-card ${zone}">
       <span class="card-pill ${pillClass}">${pillLabel}</span>
+      ${complianceBadge}
       <div class="leader-mark">${initials}</div>
       <div class="card-name">${escapeHtml(c.name)}</div>
       <div class="card-meta">Led by ${c.leader_name ? escapeHtml(c.leader_name) : 'Unassigned'}</div>
@@ -2379,10 +2454,113 @@ function renderCells(){
         <button class="btn-secondary" style="width:auto;" onclick="submitCellLeaderReassign(${c.id})">Set</button>
       </div>
       <div class="field-err" id="leaderReassignErr-${c.id}"></div>` : ''}
+
+      ${isThisLeader(c) ? `
+      <div style="margin-top:12px;">
+        <label style="font-size:12px; color:var(--muted); display:block; margin-bottom:4px;">Upload this week's proof</label>
+        <input type="file" id="proofFile-${c.id}" accept="image/*,video/*" style="width:100%;">
+        <button class="btn-secondary" style="width:100%; margin-top:6px;" id="proofBtn-${c.id}" onclick="submitCellProof(${c.id})">Submit proof</button>
+        <div class="field-err" id="proofErr-${c.id}"></div>
+      </div>` : ''}
+
+      ${canReassignLeader ? `
+      <button class="btn-ghost" style="width:100%; margin-top:8px;" onclick="openCellComplianceHistory(${c.id}, '${escapeHtml(c.name).replace(/'/g,"\\'")}')">Review proof history</button>` : ''}
     </div>`;
   }).join('');
 
   if(canReassignLeader && ALL_MEMBERS.length === 0){ loadMembers(); }
+}
+
+// ---------- Cell meeting compliance: upload + review ----------
+
+async function submitCellProof(cellId){
+  const fileInput = document.getElementById('proofFile-' + cellId);
+  const btn = document.getElementById('proofBtn-' + cellId);
+  const errEl = document.getElementById('proofErr-' + cellId);
+  errEl.innerHTML = '';
+
+  const file = fileInput.files[0];
+  if(!file){ errEl.innerHTML = errIcon('Choose a photo or video first.'); return; }
+
+  const proof_type = file.type.startsWith('video') ? 'video' : 'image';
+
+  setBtnLoading(btn, true);
+  try{
+    // Upload the raw file to Supabase Storage first; the API only
+    // ever stores the resulting public URL, never the file bytes
+    // themselves, matching submit_meeting_proof()'s own contract.
+    const proof_url = await uploadProofToSupabase(file, cellId);
+    await api('/cells/' + cellId + '/proof', {
+      method: 'POST',
+      body: JSON.stringify({ proof_url, proof_type }),
+    });
+    fileInput.value = '';
+    errEl.innerHTML = okIcon('Submitted — awaiting confirmation.');
+  }catch(e){
+    errEl.innerHTML = errIcon(e.message);
+  }finally{
+    setBtnLoading(btn, false);
+  }
+}
+
+async function openCellComplianceHistory(cellId, cellName){
+  const modal = document.getElementById('complianceModal');
+  document.getElementById('complianceModalTitle').textContent = cellName + ' — proof history';
+  const body = document.getElementById('complianceModalBody');
+  body.innerHTML = '<div class="muted">Loading…</div>';
+  modal.classList.add('active');
+
+  try{
+    const history = await api('/cells/' + cellId + '/proof-history');
+    if(history.length === 0){
+      body.innerHTML = emptyState('No proof submitted yet', 'Nothing has been uploaded for this cell.');
+      return;
+    }
+    body.innerHTML = history.map(p => {
+      const statusClass = p.status === 'confirmed' ? 'ok' : (p.status === 'rejected' ? 'flag' : '');
+      const statusLabel = p.status === 'confirmed' ? 'Confirmed' : (p.status === 'rejected' ? 'Rejected' : 'Pending review');
+      const mediaTag = p.proof_type === 'video'
+        ? `<video src="${p.proof_url}" controls style="max-width:100%; border-radius:8px; margin:8px 0;"></video>`
+        : `<img src="${p.proof_url}" style="max-width:100%; border-radius:8px; margin:8px 0;">`;
+      return `
+      <div style="border-bottom:1px solid var(--border); padding:12px 0;">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <b>${p.meeting_date}</b>
+          <span class="card-pill ${statusClass}">${statusLabel}</span>
+        </div>
+        ${mediaTag}
+        ${p.status === 'pending' && ME.role === 'admin' ? `
+        <div style="display:flex; gap:8px; margin-top:8px;">
+          <button class="btn-primary" style="width:auto;" onclick="confirmProof(${p.id}, ${cellId}, '${escapeHtml(cellName).replace(/'/g,"\\'")}')">Confirm ✓</button>
+          <button class="btn-ghost" style="width:auto;" onclick="rejectProof(${p.id}, ${cellId}, '${escapeHtml(cellName).replace(/'/g,"\\'")}')">Reject</button>
+        </div>` : ''}
+      </div>`;
+    }).join('');
+  }catch(e){
+    body.innerHTML = emptyState('Could not load history', e.message);
+  }
+}
+
+function closeComplianceModal(){
+  document.getElementById('complianceModal').classList.remove('active');
+}
+
+async function confirmProof(proofId, cellId, cellName){
+  try{
+    await api('/cells/proof/' + proofId + '/confirm', { method: 'POST' });
+    await Promise.all([loadCells(), openCellComplianceHistory(cellId, cellName)]);
+  }catch(e){
+    alert(e.message);
+  }
+}
+
+async function rejectProof(proofId, cellId, cellName){
+  try{
+    await api('/cells/proof/' + proofId + '/reject', { method: 'POST' });
+    await openCellComplianceHistory(cellId, cellName);
+  }catch(e){
+    alert(e.message);
+  }
 }
 
 async function submitCellLeaderReassign(cellId){
@@ -2412,6 +2590,8 @@ async function submitCellLeaderReassign(cellId){
 function openCreateCellModal(){
   document.getElementById('cellName').value = '';
   document.getElementById('cellMeetingDay').value = '';
+  document.getElementById('cellScheduleDay').value = '';
+  document.getElementById('cellScheduleTime').value = '';
   document.getElementById('cellErr').innerHTML = '';
 
   const eligible = ALL_MEMBERS.filter(m => m.role !== 'child');
@@ -2435,14 +2615,28 @@ async function submitCreateCell(){
   const member_id = document.getElementById('cellLeaderId').value;
   const cell_name = document.getElementById('cellName').value.trim() || null;
   const meeting_day = document.getElementById('cellMeetingDay').value || null;
+  // Structured day-of-week + time, distinct from the free-text
+  // meeting_day above -- this pair is what compliance tracking
+  // actually schedules against (see CellMeetingSchedule).
+  const scheduleDaySel = document.getElementById('cellScheduleDay');
+  const scheduleTimeInput = document.getElementById('cellScheduleTime');
+  const schedule_day_of_week = scheduleDaySel && scheduleDaySel.value !== '' ? Number(scheduleDaySel.value) : null;
+  const schedule_time = scheduleTimeInput ? scheduleTimeInput.value.trim() : '';
 
   if(!member_id){ errEl.innerHTML = errIcon('Choose a member to promote.'); return; }
+  if((schedule_day_of_week !== null) !== !!schedule_time){
+    errEl.innerHTML = errIcon('Set both the meeting day and time, or leave both blank.');
+    return;
+  }
 
   setBtnLoading(btn, true);
   try{
     await api('/members/' + member_id + '/promote-to-leader', {
       method: 'POST',
-      body: JSON.stringify({ cell_name, meeting_day }),
+      body: JSON.stringify({
+        cell_name, meeting_day,
+        schedule_day_of_week, schedule_time: schedule_time || null,
+      }),
     });
     closeCreateCellModal();
     await Promise.all([loadCells(), loadMembers()]);
