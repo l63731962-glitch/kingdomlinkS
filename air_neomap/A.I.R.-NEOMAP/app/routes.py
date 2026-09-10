@@ -1691,3 +1691,30 @@ def api_get_pending_proofs():
 def api_get_cell_history(cell_id):
     history = get_cell_compliance_history(cell_id)
     return jsonify([p.to_dict() for p in history]), 200
+
+@bp.route("/api/admin/run-migrations", methods=["POST"])
+@role_required(ROLE_ADMIN)
+def run_pending_migrations():
+    from sqlalchemy import text
+    results = {}
+
+    migrations = [
+        ("cell_groups", "consecutive_missed_weeks", "INTEGER NOT NULL DEFAULT 0"),
+    ]
+
+    for table, column, coltype in migrations:
+        existing = db.session.execute(text(
+            "SELECT column_name FROM information_schema.columns WHERE table_name = :t"
+        ), {"t": table}).fetchall()
+        existing_cols = [row[0] for row in existing]
+
+        if column in existing_cols:
+            results[f"{table}.{column}"] = "already exists"
+        else:
+            db.session.execute(text(
+                f"ALTER TABLE {table} ADD COLUMN {column} {coltype}"
+            ))
+            db.session.commit()
+            results[f"{table}.{column}"] = "added"
+
+    return jsonify(results)
