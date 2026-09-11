@@ -1329,84 +1329,7 @@ a{ color:inherit; }
         </div>
       </div>
 
-      <div class="help-section">
-        <div class="help-heading">Getting started</div>
-        <div class="help-body">
-          <p><b>KingdomLink</b> is your church's roster and attendance tracker. Everyone signs in with an email and password set for them when they were registered — if you don't have one yet, ask whoever manages members at your church to register you (see <b>Members</b> below).</p>
-          <p>The sidebar on the left is how you get around. What you see there depends on your role — a regular member sees fewer pages than a leader, and a leader sees fewer than an admin. That's intentional: everyone only sees what they need for their own part.</p>
-        </div>
-      </div>
-
-      <div class="help-section">
-        <div class="help-heading">Follow-up queue</div>
-        <div class="help-body">
-          <p>This is your home page. If you're a leader or admin, it shows people assigned to you to check on — usually because they missed a service. Open a person, make contact, and record what happened (reached them, no answer, wrong number). That closes the item.</p>
-          <p class="leader-plus" style="display:none;">If you can register members, you'll also see a <b>Visitors</b> filter here — people who visited and asked to be followed up with. You can add a new visitor directly from that view.</p>
-        </div>
-      </div>
-
-      <div class="help-section">
-        <div class="help-heading">Events</div>
-        <div class="help-body">
-          <p><b>Events</b> lists everything scheduled, upcoming and past. If you're a leader or admin, you can create a new event and mark attendance for it once it's happened — open the event and use <b>Take attendance</b> to mark each person present or absent.</p>
-        </div>
-      </div>
-
-      <div class="help-section leader-plus" style="display:none;">
-        <div class="help-heading">Birthdays</div>
-        <div class="help-body">
-          <p>Shows which members have a birthday coming up in the next 7 days, with their phone number, so you can reach out. Visible to leaders and admins only.</p>
-        </div>
-      </div>
-
-      <div class="help-section leader-plus" style="display:none;">
-        <div class="help-heading">Members</div>
-        <div class="help-body">
-          <p>This is the full roster, grouped by role. Use <b>Register member</b> to add someone new — you'll need at least their name and role. If you're registering a child, you'll also pick a guardian from the existing adults.</p>
-          <p>Click anyone's name to open their details. From there you can:</p>
-          <ul>
-            <li><b>Edit details</b> — fix a typo in their name, phone, email, area, or date of birth.</li>
-            <li><b>Move to cell</b> — move them into a different cell group, or take them out of one entirely.</li>
-          </ul>
-          <p>Suspended members are hidden from this list on purpose, so the day-to-day roster only shows people who are actually active.</p>
-        </div>
-      </div>
-
-      <div class="help-section admin-only" style="display:none;">
-        <div class="help-heading">Cell leaders</div>
-        <div class="help-body">
-          <p>This page lists every cell group. <b>New cell</b> creates one and picks its first leader in the same step. To change who leads a cell later, use the <b>Change leader</b> picker directly on that cell's card — this only changes who's leading, it does not change that person's role.</p>
-        </div>
-      </div>
-
-      <div class="help-section admin-only" style="display:none;">
-        <div class="help-heading">Statistics &amp; Admin overview</div>
-        <div class="help-body">
-          <p><b>Statistics</b> shows attendance trends over time, plus how many visitors have come through and how many have become members. <b>Admin overview</b> is a snapshot of the most recent service — who's assigned to follow up on whom, and how that's progressing.</p>
-        </div>
-      </div>
-
-      <div class="help-section admin-only" style="display:none;">
-        <div class="help-heading">Leader accountability</div>
-        <div class="help-body">
-          <p>Leaders are tracked the same way regular members are — if a leader misses services, they're flagged here too. If a leader stays unresolved past your church's configured window, it automatically escalates to senior leadership.</p>
-        </div>
-      </div>
-
-      <div class="help-section head-admin-only" style="display:none;">
-        <div class="help-heading">Role management &amp; Audit log</div>
-        <div class="help-body">
-          <p>Only visible to the Head Admin — the account your church was first set up with. <b>Role management</b> is where you promote someone to admin, demote an admin, or suspend and restore anyone's access. The Head Admin's own role and status can never be changed by anyone, including themselves — that protection is permanent.</p>
-          <p><b>Audit log</b> is a complete record of every one of those actions: who did what, to whom, and when. Nothing here can be edited or deleted.</p>
-        </div>
-      </div>
-
-      <div class="help-section">
-        <div class="help-heading">Good to know</div>
-        <div class="help-body">
-          <p>Anything you see on your own record — your own check-ins, your own RSVPs — is always visible to you. What a leader or admin sees about you is more limited by design: things like attendance counts are usually aggregate numbers, not per-person lists, unless you've specifically opted in to sharing them.</p>
-        </div>
-      </div>
+      <div id="helpGuideSections"></div>
     </div>
 
   </div>
@@ -1904,6 +1827,7 @@ function enterApp(){
   const isAdmin = ME.role === 'admin';
   const canManageMembers = ME.role === 'admin' || ME.role === 'leader';
   const isHeadAdmin = !!ME.is_head_admin;
+  renderHelpGuide();
   document.querySelectorAll('.admin-only').forEach(el => el.style.display = isAdmin ? 'flex' : 'none');
   document.querySelectorAll('.leader-plus').forEach(el => el.style.display = canManageMembers ? 'flex' : 'none');
   document.querySelectorAll('.head-admin-only').forEach(el => el.style.display = isHeadAdmin ? 'flex' : 'none');
@@ -2453,7 +2377,8 @@ function renderCells(){
         </select>
         <button class="btn-secondary" style="width:auto;" onclick="submitCellLeaderReassign(${c.id})">Set</button>
       </div>
-      <div class="field-err" id="leaderReassignErr-${c.id}"></div>` : ''}
+      <div class="field-err" id="leaderReassignErr-${c.id}"></div>
+      <button class="btn-ghost" style="width:100%; margin-top:8px; color:#e57373;" onclick="submitDeleteCell(${c.id}, '${escapeHtml(c.name).replace(/'/g,"\\'")}')">Delete cell</button>` : ''}
 
       ${isThisLeader(c) ? `
       <div style="margin-top:12px;">
@@ -2587,6 +2512,24 @@ async function submitCellLeaderReassign(cellId){
   }
 }
 
+async function submitDeleteCell(cellId, cellName){
+  // Native confirm() is a deliberate, minimal choice here rather than
+  // a custom modal -- this is the one truly irreversible action on
+  // this screen (proof/schedule history is gone for good per the
+  // backend), so a blocking, unmissable browser prompt is more
+  // appropriate than a dismissable in-page dialog someone could
+  // accidentally click through.
+  if(!confirm(`Delete "${cellName}"? Members will be unassigned, not removed. Its proof and schedule history will be permanently deleted. This cannot be undone.`)){
+    return;
+  }
+  try{
+    await api('/cells/' + cellId, { method: 'DELETE' });
+    await Promise.all([loadCells(), loadMembers()]);
+  }catch(e){
+    alert(e.message);
+  }
+}
+
 function openCreateCellModal(){
   document.getElementById('cellName').value = '';
   document.getElementById('cellMeetingDay').value = '';
@@ -2647,7 +2590,101 @@ async function submitCreateCell(){
   }
 }
 
-/* ================= Events ================= */
+/* ================= Help & guide (data-driven) =================
+ * Adding a new section to the guide is now a one-time edit here --
+ * append an object to HELP_SECTIONS, no HTML hunting required. The
+ * `visibility` field reuses the SAME classes (admin-only, leader-plus,
+ * head-admin-only) that enterApp() already toggles for the sidebar
+ * nav and page buttons, so a new guide section respects the exact
+ * same role rules as the rest of the app for free, rather than
+ * needing its own separate permission logic.
+ */
+const HELP_SECTIONS = [
+  {
+    heading: 'Getting started',
+    visibility: null,
+    body: `
+      <p><b>KingdomLink</b> is your church's roster and attendance tracker. Everyone signs in with an email and password set for them when they were registered — if you don't have one yet, ask whoever manages members at your church to register you (see <b>Members</b> below).</p>
+      <p>The sidebar on the left is how you get around. What you see there depends on your role — a regular member sees fewer pages than a leader, and a leader sees fewer than an admin. That's intentional: everyone only sees what they need for their own part.</p>`,
+  },
+  {
+    heading: 'Follow-up queue',
+    visibility: null,
+    body: `
+      <p>This is your home page. If you're a leader or admin, it shows people assigned to you to check on — usually because they missed a service. Open a person, make contact, and record what happened (reached them, no answer, wrong number). That closes the item.</p>
+      <p class="leader-plus" style="display:none;">If you can register members, you'll also see a <b>Visitors</b> filter here — people who visited and asked to be followed up with. You can add a new visitor directly from that view.</p>`,
+  },
+  {
+    heading: 'Events',
+    visibility: null,
+    body: `<p><b>Events</b> lists everything scheduled, upcoming and past. If you're a leader or admin, you can create a new event and mark attendance for it once it's happened — open the event and use <b>Take attendance</b> to mark each person present or absent.</p>`,
+  },
+  {
+    heading: 'Birthdays',
+    visibility: 'leader-plus',
+    body: `<p>Shows which members have a birthday coming up in the next 7 days, with their phone number, so you can reach out. Visible to leaders and admins only.</p>`,
+  },
+  {
+    heading: 'Members',
+    visibility: 'leader-plus',
+    body: `
+      <p>This is the full roster, grouped by role. Use <b>Register member</b> to add someone new — you'll need at least their name and role. If you're registering a child, you'll also pick a guardian from the existing adults.</p>
+      <p>Click anyone's name to open their details. From there you can:</p>
+      <ul>
+        <li><b>Edit details</b> — fix a typo in their name, phone, email, area, or date of birth.</li>
+        <li><b>Move to cell</b> — move them into a different cell group, or take them out of one entirely.</li>
+      </ul>
+      <p>Suspended members are hidden from this list on purpose, so the day-to-day roster only shows people who are actually active.</p>`,
+  },
+  {
+    heading: 'Cell leaders',
+    visibility: 'admin-only',
+    body: `
+      <p>This page lists every cell group. <b>New cell</b> creates one and picks its first leader in the same step — you can also set a recurring meeting day and time here, which is what the compliance tracking below schedules against. To change who leads a cell later, use the <b>Change leader</b> picker directly on that cell's card — this only changes who's leading, it does not change that person's role.</p>
+      <p><b>Deleting a cell</b> is permanent for that cell's own record — its proof history and schedule are removed for good. Its members are not deleted; they're simply unassigned from any cell and remain active on the roster.</p>`,
+  },
+  {
+    heading: 'Cell meeting compliance',
+    visibility: 'leader-plus',
+    body: `
+      <p>If a cell has a compliance schedule set, its leader can upload a photo or video each week as proof the meeting happened — right from that cell's card.</p>
+      <p class="admin-only" style="display:none;">Admins review submitted proof from <b>Review proof history</b> on the cell's card, and confirm or reject each one. Confirming is what actually clears a cell's missed-week count; uploading proof alone leaves it pending until reviewed.</p>`,
+  },
+  {
+    heading: 'Statistics & Admin overview',
+    visibility: 'admin-only',
+    body: `<p><b>Statistics</b> shows attendance trends over time, plus how many visitors have come through and how many have become members. <b>Admin overview</b> is a snapshot of the most recent service — who's assigned to follow up on whom, and how that's progressing.</p>`,
+  },
+  {
+    heading: 'Leader accountability',
+    visibility: 'admin-only',
+    body: `<p>Leaders are tracked the same way regular members are — if a leader misses services, they're flagged here too. If a leader stays unresolved past your church's configured window, it automatically escalates to senior leadership.</p>`,
+  },
+  {
+    heading: 'Role management & Audit log',
+    visibility: 'head-admin-only',
+    body: `
+      <p>Only visible to the Head Admin — the account your church was first set up with. <b>Role management</b> is where you promote someone to admin, demote an admin, or suspend and restore anyone's access. The Head Admin's own role and status can never be changed by anyone, including themselves — that protection is permanent.</p>
+      <p><b>Audit log</b> is a complete record of every one of those actions: who did what, to whom, and when. Nothing here can be edited or deleted.</p>`,
+  },
+  {
+    heading: 'Good to know',
+    visibility: null,
+    body: `<p>Anything you see on your own record — your own check-ins, your own RSVPs — is always visible to you. What a leader or admin sees about you is more limited by design: things like attendance counts are usually aggregate numbers, not per-person lists, unless you've specifically opted in to sharing them.</p>`,
+  },
+];
+
+function renderHelpGuide(){
+  const el = document.getElementById('helpGuideSections');
+  if(!el) return; // page not in DOM yet on first load, harmless no-op
+  el.innerHTML = HELP_SECTIONS.map(s => `
+    <div class="help-section${s.visibility ? ' ' + s.visibility : ''}"${s.visibility ? ' style="display:none;"' : ''}>
+      <div class="help-heading">${escapeHtml(s.heading)}</div>
+      <div class="help-body">${s.body}</div>
+    </div>`).join('');
+}
+
+
 const EVENT_CATEGORIES = [
   'Sunday Service', 'Midweek Service', 'Prayer Meeting', 'Convention',
   'Conference', 'Youth Program', "Women's Fellowship", "Men's Fellowship",
