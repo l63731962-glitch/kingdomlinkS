@@ -586,6 +586,40 @@ def reassign_cell_leader(cell_id):
     return jsonify(cell.to_dict())
 
 
+@bp.route("/cells/<int:cell_id>", methods=["DELETE"])
+@role_required(ROLE_ADMIN)
+def delete_cell(cell_id):
+    """
+    Permanently removes a cell. Members currently in it are
+    unassigned (cell_id set to null) rather than deleted or blocked
+    -- a cell going away is not a reason to remove real people from
+    the roster, matching how reassign_member_cell already treats
+    cell_id=null as a normal, supported state, not an error case.
+
+    CellMeetingSchedule and CellMeetingProof rows for this cell are
+    deleted outright, by explicit choice: unlike a member's own
+    attendance history, this is internal accountability tracking
+    for a cell that no longer exists, not something anyone needs to
+    audit after the fact. Deleted in that order -- proofs and
+    schedule before the cell itself -- because both carry a foreign
+    key into cell_groups.id, and the cell row has to still exist
+    while those deletes run or Postgres would reject them.
+    """
+    church_id = request.current_member["church_id"]
+
+    cell = CellGroup.query.get_or_404(cell_id)
+    if cell.church_id != church_id:
+        return jsonify({"error": "Forbidden — cross-church access denied"}), 403
+
+    Member.query.filter_by(cell_id=cell.id).update({"cell_id": None})
+    CellMeetingProof.query.filter_by(cell_id=cell.id).delete()
+    CellMeetingSchedule.query.filter_by(cell_id=cell.id).delete()
+
+    db.session.delete(cell)
+    db.session.commit()
+    return jsonify({"deleted": True, "cell_id": cell_id})
+
+
 @bp.route("/members/<int:member_id>/promote-to-leader", methods=["POST"])
 @role_required(ROLE_ADMIN)
 @church_scoped
@@ -614,6 +648,18 @@ def promote_to_leader(member_id):
     if not data.get("cell_name"):
         return jsonify({"error": "cell_name is required"}), 400
 
+    # schedule_day_of_week/schedule_time are optional here so existing
+    # callers that only send cell_name/meeting_day keep working
+    # unchanged -- but when both are provided, this is the one place
+    # a cell's compliance schedule gets set, matching "fill the time
+    # and days when creating a cell leader" rather than a separate step.
+    schedule_day_of_week = data.get("schedule_day_of_week")
+    schedule_time = data.get("schedule_time")
+    if (schedule_day_of_week is None) != (not schedule_time):
+        # only one of the pair was given -- half a schedule is worse
+        # than none, since check_and_flag_missed_weeks() needs both
+        return jsonify({"error": "schedule_day_of_week and schedule_time must be provided together"}), 400
+
     cell = CellGroup(
         church_id=church_id,
         name=data["cell_name"],
@@ -621,6 +667,15 @@ def promote_to_leader(member_id):
         meeting_day=data.get("meeting_day"),
     )
     db.session.add(cell)
+    db.session.flush()  # need cell.id before creating its schedule row
+
+    if schedule_day_of_week is not None and schedule_time:
+        set_cell_schedule(
+            cell_id=cell.id,
+            day_of_week=schedule_day_of_week,
+            meeting_time=schedule_time,
+            created_by_id=request.current_member["member_id"],
+        )
 
     if member.role not in (ROLE_LEADER, ROLE_ADMIN):
         member.role = ROLE_LEADER
@@ -1685,36 +1740,9 @@ def api_get_pending_proofs():
     proofs = get_pending_proofs_for_review(church_id)
     return jsonify([p.to_dict() for p in proofs]), 200
 
+
 @bp.route("/cells/<int:cell_id>/proof-history", methods=["GET"])
 @login_required
 def api_get_cell_history(cell_id):
     history = get_cell_compliance_history(cell_id)
     return jsonify([p.to_dict() for p in history]), 200
-
-
-@bp.route("/admin/run-migrations", methods=["POST"])
-@role_required(ROLE_ADMIN)
-def run_pending_migrations():
-    from sqlalchemy import text
-    results = {}
-
-    migrations = [
-        ("cell_groups", "consecutive_missed_weeks", "INTEGER NOT NULL DEFAULT 0"),
-    ]
-
-    for table, column, coltype in migrations:
-        existing = db.session.execute(text(
-            "SELECT column_name FROM information_schema.columns WHERE table_name = :t"
-        ), {"t": table}).fetchall()
-        existing_cols = [row[0] for row in existing]
-
-        if column in existing_cols:
-            results[f"{table}.{column}"] = "already exists"
-        else:
-            db.session.execute(text(
-                f"ALTER TABLE {table} ADD COLUMN {column} {coltype}"
-            ))
-            db.session.commit()
-            results[f"{table}.{column}"] = "added"
-
-    return jsonify(results)
