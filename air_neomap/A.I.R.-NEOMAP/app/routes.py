@@ -1,5 +1,7 @@
 from datetime import date as _date, timedelta
-from flask import Blueprint, request, jsonify
+import csv
+import io
+from flask import Blueprint, request, jsonify, Response
 from app.database import db
 from app.models import (
     Member, Church, CellGroup, Service, Visitor, FollowUpAssignment,
@@ -14,7 +16,8 @@ from app.attendance_logic import (
     submit_attendance, complete_follow_up, get_pending_queue_for_user,
     get_admin_overview, get_unassigned_members, get_leader_accountability_overview,
     get_upcoming_birthdays, submit_rsvp, get_rsvp_no_shows, get_engagement_summary,
-    get_cell_attendance_trend,
+    get_cell_attendance_trend, get_attendance_streaks, get_follow_up_outcome_stats,
+    get_cell_compliance_summary, get_at_risk_leaders, get_visitor_conversion_funnel,
 )
 from app import engagement_logic
 from app.cell_compliance_logic import (
@@ -1787,3 +1790,115 @@ def api_get_pending_proofs():
 def api_get_cell_history(cell_id):
     history = get_cell_compliance_history(cell_id)
     return jsonify([p.to_dict() for p in history]), 200
+
+
+# ---------- NEW FEATURES ----------
+
+@bp.route("/admin/attendance-streaks", methods=["GET"])
+@role_required(ROLE_ADMIN, ROLE_LEADER)
+@church_scoped
+def attendance_streaks():
+    """Leaders can see this too -- it's a warm/motivational list,
+    not sensitive follow-up data, same visibility as birthdays."""
+    church_id = request.current_member["church_id"]
+    min_streak = request.args.get("min_streak", default=3, type=int)
+    return jsonify(get_attendance_streaks(church_id, min_streak=min_streak))
+
+
+@bp.route("/admin/follow-up/outcome-stats", methods=["GET"])
+@role_required(ROLE_ADMIN)
+@church_scoped
+def follow_up_outcome_stats():
+    church_id = request.current_member["church_id"]
+    window_days = request.args.get("window_days", default=90, type=int)
+    return jsonify(get_follow_up_outcome_stats(church_id, limit_days=window_days))
+
+
+@bp.route("/admin/cell-compliance-summary", methods=["GET"])
+@role_required(ROLE_ADMIN)
+@church_scoped
+def cell_compliance_summary_route():
+    church_id = request.current_member["church_id"]
+    return jsonify(get_cell_compliance_summary(church_id))
+
+
+@bp.route("/admin/at-risk-leaders", methods=["GET"])
+@role_required(ROLE_ADMIN)
+@church_scoped
+def at_risk_leaders_route():
+    church_id = request.current_member["church_id"]
+    return jsonify(get_at_risk_leaders(church_id))
+
+
+@bp.route("/admin/visitor-funnel", methods=["GET"])
+@role_required(ROLE_ADMIN)
+@church_scoped
+def visitor_funnel_route():
+    church_id = request.current_member["church_id"]
+    return jsonify(get_visitor_conversion_funnel(church_id))
+
+
+@bp.route("/services/<int:service_id>/rsvp-pending-count", methods=["GET"])
+@role_required(ROLE_ADMIN, ROLE_LEADER)
+def rsvp_pending_count_route(service_id):
+    service = Service.query.get_or_404(service_id)
+    if service.church_id != request.current_member["church_id"]:
+        return jsonify({"error": "Forbidden — cross-church access denied"}), 403
+    return jsonify(engagement_logic.get_rsvp_pending_count(service_id, service.church_id))
+
+
+@bp.route("/admin/statistics/export.csv", methods=["GET"])
+@role_required(ROLE_ADMIN)
+@church_scoped
+def admin_statistics_export_csv():
+    """CSV, not PDF or email -- no email/SMS provider is wired in
+    anywhere in this codebase (NotificationLog stays 'logged_only'),
+    so an auto-emailed digest would point at infrastructure that
+    doesn't exist. CSV opens directly in any spreadsheet tool with
+    no new dependency and no delivery mechanism to maintain."""
+    church_id = request.current_member["church_id"]
+    range_param = request.args.get("range", default="12", type=str)
+
+    services_query = Service.query.filter_by(church_id=church_id).order_by(Service.date.desc())
+    CALENDAR_CUTOFFS = {"6m": 182, "1y": 365, "2y": 730}
+    if range_param in CALENDAR_CUTOFFS:
+        cutoff_date = _date.today() - timedelta(days=CALENDAR_CUTOFFS[range_param])
+        services_query = services_query.filter(Service.date >= cutoff_date)
+    elif range_param != "all":
+        try:
+            limit_n = int(range_param)
+        except ValueError:
+            limit_n = 12
+        services_query = services_query.limit(limit_n)
+    recent_services = services_query.all()
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["Service", "Date", "Adult+Teen Present", "Adult+Teen Absent",
+                      "Child Present", "Child Absent"])
+
+    from sqlalchemy import func
+    for svc in reversed(recent_services):
+        def _count(role_filter, present_flag):
+            q = db.session.query(func.count(AttendanceRecord.id)).join(
+                Member, AttendanceRecord.member_id == Member.id
+            ).filter(
+                AttendanceRecord.service_id == svc.id,
+                AttendanceRecord.present == present_flag,
+            )
+            q = q.filter(Member.role.in_(role_filter)) if isinstance(role_filter, list) else q.filter(Member.role == role_filter)
+            return q.scalar() or 0
+
+        writer.writerow([
+            svc.name, svc.date.isoformat(),
+            _count(["adult", "teen"], True), _count(["adult", "teen"], False),
+            _count("child", True), _count("child", False),
+        ])
+
+    csv_bytes = output.getvalue()
+    filename = f"neomap-attendance-{_date.today().isoformat()}.csv"
+    return Response(
+        csv_bytes,
+        mimetype="text/csv",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
