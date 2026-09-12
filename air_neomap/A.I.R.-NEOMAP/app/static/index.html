@@ -1267,6 +1267,11 @@ a{ color:inherit; }
           <select class="member-search" id="statsChartType" onchange="renderStatsTrend()" style="min-width:110px;">
             <option value="bar">Bar chart</option>
             <option value="line">Line chart</option>
+            <option value="area">Area chart</option>
+            <option value="stacked">Stacked bar (present/absent)</option>
+            <option value="pie">Pie chart (role mix)</option>
+            <option value="cellpie">Pie chart (cell sizes)</option>
+            <option value="histogram">Histogram (attendance sizes)</option>
           </select>
         </div>
       </div>
@@ -4001,7 +4006,36 @@ function renderStatsTrend(){
   }
 
   const chartType = document.getElementById('statsChartType').value;
-  const chartHtml = chartType === 'line' ? buildLineChart(s.attendance_trend) : buildBarChart(s.attendance_trend);
+  // Role-mix and cell-size pies don't depend on the service trend at
+  // all, so they're allowed even when attendance_trend is empty --
+  // everything else needs at least one recorded service.
+  if(chartType === 'pie'){
+    trendEl.innerHTML = roleRow + `
+      <div class="stat-card" style="margin-top:14px; padding:18px 14px;">
+        ${buildRoleMixPieChart(byRole)}
+      </div>` + visitorSummary;
+    return;
+  }
+  if(chartType === 'cellpie'){
+    const cells = s.cell_sizes || [];
+    trendEl.innerHTML = roleRow + `
+      <div class="stat-card" style="margin-top:14px; padding:18px 14px;">
+        ${cells.length ? buildCellSizePieChart(cells) : emptyState('No cells yet', 'Cell sizes will appear here once cells have members.')}
+      </div>` + visitorSummary;
+    return;
+  }
+
+  if(s.attendance_trend.length === 0){
+    trendEl.innerHTML = roleRow + emptyState('No attendance recorded yet', 'The trend will appear once a service has attendance submitted.') + visitorSummary;
+    return;
+  }
+
+  let chartHtml;
+  if(chartType === 'line') chartHtml = buildLineChart(s.attendance_trend);
+  else if(chartType === 'area') chartHtml = buildAreaChart(s.attendance_trend);
+  else if(chartType === 'stacked') chartHtml = buildStackedBarChart(s.attendance_trend);
+  else if(chartType === 'histogram') chartHtml = buildHistogramChart(s.attendance_trend);
+  else chartHtml = buildBarChart(s.attendance_trend);
 
   trendEl.innerHTML = roleRow + `
     <div class="stat-card" style="margin-top:14px; padding:18px 14px;">
@@ -4070,6 +4104,170 @@ function buildLineChart(trend){
         ${labels}
       </svg>
     </div>`;
+}
+
+function buildAreaChart(trend){
+  // Same point layout as buildLineChart, but fills the area under
+  // the line -- literally the same data, just a different fill, so
+  // it reuses buildLineChart's x/y math rather than duplicating it
+  // with a second set of numbers that could drift out of sync.
+  const w = Math.max(320, trend.length * 40);
+  const h = 110;
+  const padTop = 14, padBottom = 20;
+  const maxVal = Math.max(...trend.map(t => t.present), 1);
+  const stepX = trend.length > 1 ? (w - 20) / (trend.length - 1) : 0;
+
+  const points = trend.map((t, i) => {
+    const x = 10 + i * stepX;
+    const y = padTop + (1 - (t.present / maxVal)) * (h - padTop - padBottom);
+    return { x, y, t };
+  });
+
+  const lineD = points.map((p, i) => (i === 0 ? 'M' : 'L') + p.x.toFixed(1) + ',' + p.y.toFixed(1)).join(' ');
+  const baseline = h - padBottom;
+  const areaD = lineD
+    + ` L${points[points.length - 1].x.toFixed(1)},${baseline}`
+    + ` L${points[0].x.toFixed(1)},${baseline} Z`;
+
+  const circles = points.map(p => `
+    <circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="9" fill="transparent" style="cursor:pointer;" onclick="showStatsAttendees(${p.t.service_id})">
+      <title>${escapeHtml(p.t.date)}: ${p.t.present} present, ${p.t.absent} absent — click for names</title>
+    </circle>`).join('');
+
+  const labels = points.map((p, i) => {
+    if(trend.length > 15 && i % Math.ceil(trend.length / 15) !== 0) return '';
+    return `<text x="${p.x.toFixed(1)}" y="${h - 4}" font-size="9.5" fill="var(--slate)" text-anchor="middle">${escapeHtml(p.t.date.slice(5))}</text>`;
+  }).join('');
+
+  return `
+    <div style="overflow-x:auto;">
+      <svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" style="display:block;">
+        <path d="${areaD}" fill="var(--clay)" fill-opacity="0.22" stroke="none"/>
+        <path d="${lineD}" fill="none" stroke="var(--clay)" stroke-width="2"/>
+        ${circles}
+        ${labels}
+      </svg>
+    </div>`;
+}
+
+function buildStackedBarChart(trend){
+  // Each service's own present+absent total is its own 100% -- this
+  // is a per-service composition chart, not a shared scale across
+  // services, so every bar is the same height and only the present/
+  // absent split inside it varies (matches the 100%-component-bar
+  // idea from the population-chart list, applied to real data this
+  // app actually has instead of a demographic split it doesn't).
+  const bars = trend.map(t => {
+    const total = t.present + t.absent;
+    const presentPct = total ? Math.round((t.present / total) * 100) : 0;
+    return `
+      <div style="display:flex; flex-direction:column; align-items:center; gap:6px; flex:1; min-width:0;">
+        <div style="width:100%; max-width:34px; height:90px; display:flex; flex-direction:column; border-radius:6px; overflow:hidden; cursor:pointer;" onclick="showStatsAttendees(${t.service_id})" title="${escapeHtml(t.date)}: ${t.present} present, ${t.absent} absent (${presentPct}%)">
+          <div style="width:100%; height:${100 - presentPct}%; background:var(--parchment-dim);"></div>
+          <div style="width:100%; height:${presentPct}%; background:var(--clay);"></div>
+        </div>
+        <div style="font-size:10.5px; color:var(--slate); white-space:nowrap;">${t.date.slice(5)}</div>
+      </div>`;
+  }).join('');
+  return `
+    <div style="display:flex; align-items:flex-end; gap:8px; overflow-x:auto;">${bars}</div>
+    <div style="display:flex; gap:14px; justify-content:center; margin-top:10px; font-size:11px; color:var(--slate);">
+      <span><span style="display:inline-block; width:9px; height:9px; background:var(--clay); border-radius:2px; margin-right:4px;"></span>Present</span>
+      <span><span style="display:inline-block; width:9px; height:9px; background:var(--parchment-dim); border:1px solid var(--line); border-radius:2px; margin-right:4px;"></span>Absent</span>
+    </div>`;
+}
+
+function buildHistogramChart(trend){
+  // A histogram needs bucketed counts of a single numeric value, not
+  // a time series -- so this buckets "present headcount per service"
+  // into ranges (how many services had 0-9 present, 10-19, etc.)
+  // rather than plotting present-over-time again under a new name.
+  const values = trend.map(t => t.present);
+  const maxVal = Math.max(...values, 1);
+  const bucketSize = Math.max(1, Math.ceil((maxVal + 1) / 8));
+  const bucketCount = Math.ceil((maxVal + 1) / bucketSize);
+  const buckets = new Array(bucketCount).fill(0);
+  values.forEach(v => { buckets[Math.min(Math.floor(v / bucketSize), bucketCount - 1)]++; });
+
+  const maxCount = Math.max(...buckets, 1);
+  const bars = buckets.map((count, i) => {
+    const rangeStart = i * bucketSize;
+    const rangeEnd = rangeStart + bucketSize - 1;
+    const barHeight = count ? Math.max(6, Math.round((count / maxCount) * 90)) : 0;
+    return `
+      <div style="display:flex; flex-direction:column; align-items:center; gap:6px; flex:1; min-width:0;">
+        <div style="font-size:11px; color:var(--slate);">${count}</div>
+        <div style="width:100%; max-width:34px; height:90px; display:flex; align-items:flex-end; background:var(--parchment-dim); border-radius:6px; overflow:hidden;">
+          <div style="width:100%; height:${barHeight}%; background:var(--clay); border-radius:6px 6px 0 0;" title="${count} service${count===1?'':'s'} with ${rangeStart}–${rangeEnd} present"></div>
+        </div>
+        <div style="font-size:10px; color:var(--slate); white-space:nowrap;">${rangeStart}-${rangeEnd}</div>
+      </div>`;
+  }).join('');
+  return `
+    <div style="display:flex; align-items:flex-end; gap:8px; overflow-x:auto;">${bars}</div>
+    <div class="led-meta" style="margin-top:6px; text-align:center;">Number of services by present-headcount range</div>`;
+}
+
+function _pieSlicePath(cx, cy, r, startAngle, endAngle){
+  const toXY = a => [cx + r * Math.cos(a), cy + r * Math.sin(a)];
+  const [x1, y1] = toXY(startAngle);
+  const [x2, y2] = toXY(endAngle);
+  const largeArc = (endAngle - startAngle) % (2 * Math.PI) > Math.PI ? 1 : 0;
+  return `M${cx},${cy} L${x1.toFixed(2)},${y1.toFixed(2)} A${r},${r} 0 ${largeArc} 1 ${x2.toFixed(2)},${y2.toFixed(2)} Z`;
+}
+
+function _buildPieChart(slices){
+  // slices: [{label, value, color}]. Shared renderer for both pie
+  // options below so the role-mix and cell-size pies stay visually
+  // consistent instead of two near-duplicate SVG builders drifting
+  // apart over time.
+  const total = slices.reduce((sum, s) => sum + s.value, 0);
+  if(total === 0){
+    return emptyState('Nothing to chart yet', 'This will fill in once there is data.');
+  }
+  const cx = 70, cy = 70, r = 60;
+  let angle = -Math.PI / 2;
+  const paths = slices.filter(s => s.value > 0).map(s => {
+    const sweep = (s.value / total) * 2 * Math.PI;
+    const d = _pieSlicePath(cx, cy, r, angle, angle + sweep);
+    angle += sweep;
+    const pct = Math.round((s.value / total) * 100);
+    return `<path d="${d}" fill="${s.color}"><title>${escapeHtml(s.label)}: ${s.value} (${pct}%)</title></path>`;
+  }).join('');
+
+  const legend = slices.filter(s => s.value > 0).map(s => {
+    const pct = Math.round((s.value / total) * 100);
+    return `<div style="display:flex; align-items:center; gap:6px; font-size:12px;">
+      <span style="display:inline-block; width:10px; height:10px; background:${s.color}; border-radius:2px;"></span>
+      <span>${escapeHtml(s.label)} — ${s.value} (${pct}%)</span>
+    </div>`;
+  }).join('');
+
+  return `
+    <div style="display:flex; gap:20px; align-items:center; flex-wrap:wrap; justify-content:center;">
+      <svg width="140" height="140" viewBox="0 0 140 140">${paths}</svg>
+      <div style="display:flex; flex-direction:column; gap:6px;">${legend}</div>
+    </div>`;
+}
+
+function buildRoleMixPieChart(byRole){
+  const palette = {
+    adult: 'var(--clay)', teen: 'var(--gold)', child: '#7a9e7e',
+    leader: 'var(--slate)', admin: '#6b5b95',
+  };
+  const labels = { adult: 'Adults', teen: 'Teens', child: 'Children', leader: 'Leaders', admin: 'Admins' };
+  const slices = Object.keys(labels).map(role => ({
+    label: labels[role], value: byRole[role] || 0, color: palette[role],
+  }));
+  return _buildPieChart(slices);
+}
+
+function buildCellSizePieChart(cells){
+  const palette = ['var(--clay)', 'var(--gold)', '#7a9e7e', 'var(--slate)', '#6b5b95', '#c96f6f', '#5b8ab5', '#b58a3a'];
+  const slices = cells.map((c, i) => ({
+    label: c.name, value: c.member_count, color: palette[i % palette.length],
+  }));
+  return _buildPieChart(slices);
 }
 
 async function showStatsAttendees(serviceId){
