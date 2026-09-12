@@ -182,8 +182,13 @@ def submit_attendance(church_id, service_id, present_member_ids, submitted_by_id
          submitter with no one to mark them present — see
          submitted_by_id handling below.
 
-    Children are excluded from both streams — tracked via guardian,
-    not directly.
+      3. Children (role='child') -> checked the same way as everyone
+         else in present_member_ids, own AttendanceRecord per child.
+         An absent child's follow-up routes to their own guardian_id
+         first (not the child's own cell_id, which children don't
+         have); if the child has no guardian on file, falls back to
+         the same cell-leader/round-robin/admin resolution as an
+         unassigned adult, via _resolve_follow_up_owner.
     """
     church = Church.query.get_or_404(church_id)
     threshold = church.follow_up_threshold or 3
@@ -231,17 +236,48 @@ def submit_attendance(church_id, service_id, present_member_ids, submitted_by_id
         if record:
             created_records.append(record)
 
+    # ---------- Stream 3: children ----------
+    active_children = Member.query.filter(
+        Member.church_id == church_id,
+        Member.membership_status == "active",
+        Member.role == "child",
+    ).all()
+
+    for child in active_children:
+        # Guardian first, same as an adult's cell leader; only fall
+        # back to the general resolver if this child has no guardian
+        # on file (guardian_id was optional at registration).
+        guardian_owner = None
+        if child.guardian_id:
+            guardian = Member.query.get(child.guardian_id)
+            if guardian and guardian.membership_status == "active":
+                guardian_owner = guardian.id
+
+        record = _process_absence_check(
+            child, service_id, today, present_set, threshold, church,
+            escalation_reason="escalation",
+            force_owner=guardian_owner if guardian_owner else _resolve_follow_up_owner(child, church.id),
+            assignment_reason="weekly_absence",
+        )
+        if record:
+            created_records.append(record)
+
     db.session.commit()
     return created_records
 
 
 def _process_absence_check(person, service_id, today, present_set, threshold, church,
-                            escalation_reason, force_owner=None):
+                            escalation_reason, force_owner=None, assignment_reason=None):
     """
     Shared diff logic for one person against one service. Handles
-    both member follow-up and leader self-accountability — the only
-    difference between the two streams is who the assignment routes
-    to (force_owner overrides the cell-based lookup for leaders).
+    member follow-up, leader self-accountability, and child
+    follow-up — the differences between the streams are who the
+    assignment routes to (force_owner overrides the cell-based
+    lookup) and what reason gets stamped on it (assignment_reason;
+    defaults to inferring from force_owner for backward
+    compatibility with the two original streams, but children pass
+    this explicitly since they always use force_owner yet are NOT
+    leader accountability).
     """
     is_present = person.id in present_set
 
@@ -269,11 +305,16 @@ def _process_absence_check(person, service_id, today, present_set, threshold, ch
     # force_owner happens to equal their own id (e.g. the admin
     # missing a service) — skip creating a self-assignment.
     if owner_id and owner_id != person.id:
+        if assignment_reason is not None:
+            reason = assignment_reason
+        else:
+            reason = "weekly_absence" if force_owner is None else "leader_attendance"
+
         assignment = FollowUpAssignment(
             attendance_record_id=record.id,
             assigned_to=owner_id,
             status="pending",
-            reason="weekly_absence" if force_owner is None else "leader_attendance",
+            reason=reason,
         )
         db.session.add(assignment)
         db.session.flush()
