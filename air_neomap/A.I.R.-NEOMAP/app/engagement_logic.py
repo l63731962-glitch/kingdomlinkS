@@ -233,3 +233,28 @@ def get_rsvp_count(service_id):
     yes = EventRSVP.query.filter_by(service_id=service_id, response="yes").count()
     maybe = EventRSVP.query.filter_by(service_id=service_id, response="maybe").count()
     return {"service_id": service_id, "yes": yes, "maybe": maybe}
+
+
+def get_rsvp_pending_count(service_id, church_id):
+    """
+    Feature: RSVP reminder nudge. Aggregate-only, same consent
+    boundary get_rsvp_count already enforces -- returns a bare number
+    of members who haven't RSVP'd yet, never their names, so it can't
+    become the "who hasn't responded" list this module's docstring
+    says must never exist. No notification is sent or logged here;
+    it's a passive count a leader/admin can glance at, not a routed
+    assignment, since silence before an event isn't the same signal
+    as an absence after one.
+    """
+    total_eligible = Member.query.filter(
+        Member.church_id == church_id,
+        Member.membership_status == "active",
+        Member.role.in_(["adult", "teen"]),
+    ).count()
+    responded = EventRSVP.query.filter_by(service_id=service_id).count()
+    return {
+        "service_id": service_id,
+        "total_eligible": total_eligible,
+        "responded": responded,
+        "not_yet_responded": max(0, total_eligible - responded),
+    }
