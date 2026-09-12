@@ -631,9 +631,10 @@ def promote_to_leader(member_id):
     which is why every submission there 405'd against Flask's
     static-file catch-all instead of reaching a real handler.
 
-    role != 'child' mirrors the frontend's own eligibility filter
-    (index.html: eligible = ALL_MEMBERS.filter(m => m.role !== 'child')),
-    enforced here server-side rather than trusted from the client.
+    role != 'child' is enforced here server-side rather than trusted
+    from the client -- a child can be checked present/absent on their
+    own attendance (see attendance_logic.submit_attendance's child
+    stream) but still can't be promoted to lead a cell.
     """
     data = request.json or {}
     church_id = request.current_member["church_id"]
@@ -1263,6 +1264,7 @@ def admin_statistics():
     recent_services = services_query.all()
 
     attendance_trend = []
+    role_present_absent = {"adult": [0, 0], "teen": [0, 0], "child": [0, 0]}
     for svc in reversed(recent_services):
         present = (
             db.session.query(func.count(AttendanceRecord.id))
@@ -1284,16 +1286,54 @@ def admin_statistics():
             )
             .scalar()
         ) or 0
+        # Children get their own present/absent count per service,
+        # separate from the adult+teen total above -- their absences
+        # now generate real AttendanceRecord rows (routed to guardian
+        # via submit_attendance's third stream), so they belong in
+        # this trend too, just not blended into the adult/teen figure
+        # callers already depend on.
+        child_present = (
+            db.session.query(func.count(AttendanceRecord.id))
+            .join(Member, AttendanceRecord.member_id == Member.id)
+            .filter(
+                AttendanceRecord.service_id == svc.id,
+                Member.role == "child",
+                AttendanceRecord.present == True,  # noqa: E712
+            )
+            .scalar()
+        ) or 0
+        child_absent = (
+            db.session.query(func.count(AttendanceRecord.id))
+            .join(Member, AttendanceRecord.member_id == Member.id)
+            .filter(
+                AttendanceRecord.service_id == svc.id,
+                Member.role == "child",
+                AttendanceRecord.present == False,  # noqa: E712
+            )
+            .scalar()
+        ) or 0
         attendance_trend.append({
             "service_id": svc.id,
             "date": svc.date.isoformat(),
             "service_name": svc.name,
             "present": present,
             "absent": absent,
+            "child_present": child_present,
+            "child_absent": child_absent,
         })
 
     latest_service_date = recent_services[0].date.isoformat() if recent_services else None
     latest_present = attendance_trend[-1]["present"] if attendance_trend else 0
+
+    # Cell sizes and visitor-vs-converted split: both are already
+    # aggregate-only (no per-member data), same guarantee
+    # engagement_logic.get_cell_sizes() documents -- reused here so
+    # the pie/stacked-bar chart options have real composition data to
+    # draw from instead of only ever having the role breakdown.
+    cell_sizes = [
+        {"name": c.name, "member_count": Member.query.filter_by(cell_id=c.id, membership_status="active").count()}
+        for c in CellGroup.query.filter_by(church_id=church_id).all()
+    ]
 
     return jsonify({
         "total_members": total_members,
@@ -1301,6 +1341,7 @@ def admin_statistics():
         "total_visitors": total_visitors,
         "converted_visitors": converted_visitors,
         "by_role": by_role,
+        "cell_sizes": cell_sizes,
         "open_follow_ups": open_follow_ups,
         "latest_service_date": latest_service_date,
         "latest_attendance": {"present": latest_present},
