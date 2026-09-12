@@ -1287,10 +1287,28 @@ a{ color:inherit; }
           <div class="page-title">Admin overview</div>
           <div class="page-sub" id="adminSub">This week's follow-up completion.</div>
         </div>
+        <div class="page-head-actions">
+          <a class="btn-small" id="digestExportBtn" href="#" onclick="downloadDigestCsv(event)">Export CSV</a>
+        </div>
       </div>
       <div class="stat-row" id="adminStats"></div>
       <div class="section-label">All pending, church-wide</div>
       <div class="ledger" id="adminLedger"></div>
+
+      <div class="section-label">Attendance streaks</div>
+      <div id="streaksWidget"></div>
+
+      <div class="section-label">Cell compliance</div>
+      <div id="cellComplianceWidget"></div>
+
+      <div class="section-label">At-risk leaders</div>
+      <div id="atRiskLeadersWidget"></div>
+
+      <div class="section-label">Follow-up outcomes (last 90 days)</div>
+      <div id="followUpOutcomesWidget"></div>
+
+      <div class="section-label">Visitor conversion funnel</div>
+      <div id="visitorFunnelWidget"></div>
     </div>
 
     <!-- ---- Leader accountability ---- -->
@@ -1641,7 +1659,8 @@ a{ color:inherit; }
       </button>
     </div>
 
-    <input class="member-search att-search" id="attSearch" type="text" placeholder="Search by name…" oninput="renderAttendanceRows()">
+    <input class="member-search att-search" id="attSearch" type="text" placeholder="Search by name… (Enter to confirm top match present)" onkeydown="if(event.key==='Enter'){event.preventDefault();handleQuickAttendEnter();}" oninput="renderAttendanceRows()">
+    <div id="attQuickConfirm" style="display:none;"></div>
 
     <div class="att-summary" id="attSummary"></div>
 
@@ -2778,6 +2797,10 @@ function renderEvents(){
   pastEl.innerHTML = past.length === 0
     ? emptyState('No past events yet', 'Events move here automatically once their date passes.')
     : past.map(e => cardForEvent(e)).join('');
+
+  upcoming
+    .filter(e => { const p = computeEventPhase(e); return p === 'upcoming' || p === 'ongoing'; })
+    .forEach(e => loadRsvpPendingCount(e.id));
 }
 
 // Small pill shown next to the event name so the phase is visible at a
@@ -2809,6 +2832,7 @@ function cardForEvent(e){
   const canTakeAttendance = ME && (ME.role === 'admin' || ME.role === 'leader') && phase === 'needs_attendance';
   const canCancel = ME && ME.role === 'admin' && (phase === 'upcoming' || phase === 'ongoing' || phase === 'needs_attendance');
   const canCheckNoShows = ME && (ME.role === 'admin' || ME.role === 'leader') && (phase === 'needs_attendance' || phase === 'finished');
+  const canSeeRsvpPending = ME && (ME.role === 'admin' || ME.role === 'leader') && (phase === 'upcoming' || phase === 'ongoing');
 
   return `
     <div class="leader-card ${zone}">
@@ -2823,8 +2847,21 @@ function cardForEvent(e){
       ${canTakeAttendance ? `<div style="margin-top:12px;"><button class="btn-primary" style="margin-top:0;" onclick="openAttendanceModal(${e.id})">Take attendance</button></div>` : ''}
       ${canCancel ? `<div style="margin-top:8px;"><button class="btn-danger" style="width:100%;" onclick="cancelEvent(${e.id})">Cancel event</button></div>` : ''}
       ${canCheckNoShows ? `<div style="margin-top:8px;"><button class="btn-secondary" style="width:100%;" onclick="checkRsvpNoShows(${e.id})">Check RSVP no-shows</button></div><div id="noshows-${e.id}" style="margin-top:10px;"></div>` : ''}
+      ${canSeeRsvpPending ? `<div id="rsvp-pending-${e.id}" class="led-meta" style="margin-top:8px;">Loading RSVP status…</div>` : ''}
       ${phase === 'finished' ? `<div class="led-meta" style="margin-top:10px;">Attendance recorded for this event.</div>` : ''}
     </div>`;
+}
+
+async function loadRsvpPendingCount(serviceId){
+  const el = document.getElementById('rsvp-pending-' + serviceId);
+  if(!el) return;
+  try{
+    const r = await api('/services/' + serviceId + '/rsvp-pending-count');
+    const pending = r.not_yet_responded ?? 0;
+    el.textContent = pending > 0 ? `${pending} of ${r.total_eligible} haven't RSVP'd yet` : `Everyone eligible has responded`;
+  }catch(e){
+    el.textContent = '';
+  }
 }
 
 async function checkRsvpNoShows(serviceId){
@@ -2868,12 +2905,13 @@ function openAttendanceModal(serviceId){
     : '';
   document.getElementById('attSearch').value = '';
   document.getElementById('attErr').innerHTML = '';
+  document.getElementById('attQuickConfirm').style.display = 'none';
 
-  // Everyone who can physically be present gets a row -- leaders and
-  // admins included, not just members. submit_attendance() marks
-  // anyone absent from the submitted list absent by omission, so a
-  // leader whose row is never shown here would silently be recorded
-  // absent from their OWN attendance stream every single week.
+  // Everyone who can physically be present gets a row -- leaders,
+  // admins, and children included, not just adult members.
+  // submit_attendance() marks anyone absent from the submitted list
+  // absent by omission, so a leader (or a child) whose row is never
+  // shown here would silently be recorded absent every single week.
   renderAttendanceRows();
   document.getElementById('attendanceModal').classList.add('active');
 }
@@ -2882,14 +2920,47 @@ function closeAttendanceModal(){
   document.getElementById('attendanceModal').classList.remove('active');
 }
 
+function handleQuickAttendEnter(){
+  // Confirm step, not instant-mark: Enter narrows to the top search
+  // match and asks "is this them?" rather than marking present
+  // immediately. Every other mutation in this app (suspend, promote,
+  // delete cell) requires a deliberate click -- silently marking the
+  // wrong person present on a typo or a common-name collision would
+  // be the one exception to that pattern, so this stays two steps.
+  const matches = attendanceEligibleMembers();
+  const confirmEl = document.getElementById('attQuickConfirm');
+  if(matches.length === 0){
+    confirmEl.style.display = 'none';
+    return;
+  }
+  const m = matches[0];
+  const extra = matches.length > 1 ? ` (+${matches.length - 1} more match${matches.length - 1 === 1 ? '' : 'es'} below)` : '';
+  confirmEl.style.display = 'block';
+  confirmEl.innerHTML = `
+    <div class="stat-card" style="margin:8px 0; padding:10px 12px; display:flex; align-items:center; justify-content:space-between; gap:10px;">
+      <span style="font-size:12.5px;">Mark <b>${escapeHtml(m.full_name)}</b> present?${extra}</span>
+      <span style="display:flex; gap:6px;">
+        <button class="btn-small" onclick="quickConfirmPresent(${m.id})">Yes, present</button>
+        <button class="btn-ghost" style="padding:4px 10px; font-size:12px;" onclick="document.getElementById('attQuickConfirm').style.display='none';">Cancel</button>
+      </span>
+    </div>`;
+}
+
+function quickConfirmPresent(memberId){
+  setAttendance(memberId, true);
+  document.getElementById('attSearch').value = '';
+  document.getElementById('attQuickConfirm').style.display = 'none';
+  renderAttendanceRows();
+}
+
 function attendanceEligibleMembers(){
-  // Children are tracked via their guardian, not directly -- excluded
-  // here the same way the "promote to cell leader" member list excludes
-  // them, and the same way submit_attendance()'s own docstring says
-  // both accountability streams exclude role='child'.
+  // Children are now checkable rows just like adults, teens, leaders,
+  // and admins -- submit_attendance() on the backend runs a third
+  // diff stream for role='child' and routes an absent child's
+  // follow-up to their own guardian_id (falling back to the normal
+  // cell-leader/team resolver if no guardian is on file).
   const q = document.getElementById('attSearch').value.trim().toLowerCase();
   return ALL_MEMBERS
-    .filter(m => m.role !== 'child')
     .filter(m => !q || m.full_name.toLowerCase().includes(q));
 }
 
@@ -2897,7 +2968,7 @@ function renderAttendanceRows(){
   const el = document.getElementById('attRows');
   const members = attendanceEligibleMembers();
 
-  if(ALL_MEMBERS.filter(m => m.role !== 'child').length === 0){
+  if(ALL_MEMBERS.length === 0){
     el.innerHTML = emptyState('No members yet', 'Register members before taking attendance.');
     updateAttendanceSummary();
     return;
@@ -2910,11 +2981,14 @@ function renderAttendanceRows(){
 
   el.innerHTML = members.map(m => {
     const state = ATT_STATE[m.id]; // true | false | undefined
+    const subLabel = m.role === 'child'
+      ? (m.guardian_name ? 'Guardian: ' + escapeHtml(m.guardian_name) : 'No guardian on file')
+      : (m.cell_name ? escapeHtml(m.cell_name) : '');
     return `
     <div class="att-row">
       <div>
         <div class="att-name">${escapeHtml(m.full_name)}</div>
-        <div class="att-role">${escapeHtml(m.role)}${m.cell_name ? ' · ' + escapeHtml(m.cell_name) : ''}</div>
+        <div class="att-role">${escapeHtml(m.role)}${subLabel ? ' · ' + subLabel : ''}</div>
       </div>
       <div class="att-toggle">
         <button class="absent-btn ${state === false ? 'active' : ''}" onclick="setAttendance(${m.id}, false)" aria-label="Mark ${escapeHtml(m.full_name)} absent" title="Absent">
@@ -2940,7 +3014,7 @@ function setAttendance(memberId, isPresent){
 
 function updateAttendanceSummary(){
   const el = document.getElementById('attSummary');
-  const total = ALL_MEMBERS.filter(m => m.role !== 'child').length;
+  const total = ALL_MEMBERS.length;
   const values = Object.values(ATT_STATE);
   const presentCount = values.filter(v => v === true).length;
   const absentCount = values.filter(v => v === false).length;
@@ -3919,6 +3993,141 @@ async function loadAdminOverview(){
   }catch(e){
     statsEl.innerHTML = '';
     ledgerEl.innerHTML = emptyState('Could not load overview', e.message);
+  }
+  loadStreaksWidget();
+  loadCellComplianceWidget();
+  loadAtRiskLeadersWidget();
+  loadFollowUpOutcomesWidget();
+  loadVisitorFunnelWidget();
+}
+
+async function downloadDigestCsv(evt){
+  if(evt) evt.preventDefault();
+  const btn = document.getElementById('digestExportBtn');
+  try{
+    const res = await fetch(API + '/admin/statistics/export.csv?range=12', {
+      headers: authHeaders(),
+    });
+    if(res.status === 401){ logout(); throw new Error('Unauthorized'); }
+    if(!res.ok) throw new Error('Export failed: ' + res.status);
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `neomap-attendance-${new Date().toISOString().slice(0,10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }catch(e){
+    alert('Could not export CSV: ' + e.message);
+  }
+}
+
+async function loadStreaksWidget(){
+  const el = document.getElementById('streaksWidget');
+  if(!el) return;
+  try{
+    const streaks = await api('/admin/attendance-streaks?min_streak=3');
+    el.innerHTML = streaks.length === 0
+      ? emptyState('No streaks yet', 'Members show up here once they attend 3 services in a row.')
+      : `<div class="leader-grid">` + streaks.map(m => `
+        <div class="leader-card zone-ok">
+          <span class="card-pill ok">${m.consecutive_present} in a row</span>
+          <div class="card-name">${escapeHtml(m.full_name)}</div>
+          <div class="card-meta">${escapeHtml(m.cell_name || m.role)}</div>
+        </div>`).join('') + `</div>`;
+  }catch(e){
+    el.innerHTML = emptyState('Could not load streaks', e.message);
+  }
+}
+
+async function loadCellComplianceWidget(){
+  const el = document.getElementById('cellComplianceWidget');
+  if(!el) return;
+  try{
+    const s = await api('/admin/cell-compliance-summary');
+    const cardsHtml = `
+      <div class="stat-row" style="margin-top:0;">
+        <div class="stat-card"><div class="stat-val">${s.total_cells}</div><div class="stat-label">Total cells</div></div>
+        <div class="stat-card gold"><div class="stat-val">${s.pending_proof_review}</div><div class="stat-label">Proofs awaiting review</div></div>
+        <div class="stat-card clay"><div class="stat-val">${s.cells_at_risk.length}</div><div class="stat-label">Cells at risk</div></div>
+      </div>`;
+    const atRiskHtml = s.cells_at_risk.length === 0 ? '' : s.cells_at_risk.map(c => `
+      <div style="display:flex; justify-content:space-between; padding:7px 0; border-top:1px solid var(--line); font-size:12.5px;">
+        <span>${escapeHtml(c.name)}</span><span>${c.consecutive_missed_weeks} weeks missed</span>
+      </div>`).join('');
+    el.innerHTML = cardsHtml + atRiskHtml;
+  }catch(e){
+    el.innerHTML = emptyState('Could not load cell compliance', e.message);
+  }
+}
+
+async function loadAtRiskLeadersWidget(){
+  const el = document.getElementById('atRiskLeadersWidget');
+  if(!el) return;
+  try{
+    const flagged = await api('/admin/at-risk-leaders');
+    el.innerHTML = flagged.length === 0
+      ? emptyState('No compounding risk right now', 'Flags only when a leader is both personally missing services and their cell isn\'t submitting proof.')
+      : `<div class="leader-grid">` + flagged.map(l => `
+        <div class="leader-card zone-flag">
+          <span class="card-pill flag">At risk</span>
+          <div class="card-name">${escapeHtml(l.leader_name)}</div>
+          <div class="card-meta">${escapeHtml(l.cell_name)}</div>
+        </div>`).join('') + `</div>`;
+  }catch(e){
+    el.innerHTML = emptyState('Could not load at-risk leaders', e.message);
+  }
+}
+
+async function loadFollowUpOutcomesWidget(){
+  const el = document.getElementById('followUpOutcomesWidget');
+  if(!el) return;
+  try{
+    const s = await api('/admin/follow-up/outcome-stats');
+    const t = s.totals;
+    const totalAll = t.reached_ok + t.reached_concern + t.no_answer + t.invalid_number;
+    if(totalAll === 0){
+      el.innerHTML = emptyState('No completed follow-ups yet', 'This fills in once leaders start marking calls done.');
+      return;
+    }
+    el.innerHTML = `
+      <div class="stat-row" style="margin-top:0;">
+        <div class="stat-card green"><div class="stat-val">${s.overall_connect_rate}%</div><div class="stat-label">Connect rate</div></div>
+        <div class="stat-card"><div class="stat-val">${t.reached_ok}</div><div class="stat-label">Reached, OK</div></div>
+        <div class="stat-card gold"><div class="stat-val">${t.reached_concern}</div><div class="stat-label">Reached, concern</div></div>
+        <div class="stat-card clay"><div class="stat-val">${t.no_answer}</div><div class="stat-label">No answer</div></div>
+      </div>`;
+  }catch(e){
+    el.innerHTML = emptyState('Could not load follow-up outcomes', e.message);
+  }
+}
+
+async function loadVisitorFunnelWidget(){
+  const el = document.getElementById('visitorFunnelWidget');
+  if(!el) return;
+  try{
+    const f = await api('/admin/visitor-funnel');
+    if(f.visited === 0){
+      el.innerHTML = emptyState('No visitors logged yet', 'The funnel fills in once visitors are added.');
+      return;
+    }
+    const pct = v => f.visited ? Math.round((v / f.visited) * 100) : 0;
+    const stage = (label, value) => `
+      <div style="display:flex; flex-direction:column; align-items:center; gap:4px; flex:1;">
+        <div style="font-weight:600; font-size:16px;">${value}</div>
+        <div style="font-size:11px; color:var(--slate); text-align:center;">${label}</div>
+        <div style="font-size:10px; color:var(--slate);">${pct(value)}%</div>
+      </div>`;
+    el.innerHTML = `<div class="stat-card" style="padding:16px 14px; display:flex; gap:8px; align-items:center;">
+      ${stage('Visited', f.visited)}<div style="color:var(--line);">→</div>
+      ${stage('Wanted follow-up', f.wanted_follow_up)}<div style="color:var(--line);">→</div>
+      ${stage('Contacted', f.contacted)}<div style="color:var(--line);">→</div>
+      ${stage('Converted', f.converted)}
+    </div>`;
+  }catch(e){
+    el.innerHTML = emptyState('Could not load visitor funnel', e.message);
   }
 }
 
