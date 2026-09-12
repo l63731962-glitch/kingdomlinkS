@@ -173,6 +173,12 @@ class Member(db.Model):
 
     cell_id = db.Column(db.Integer, db.ForeignKey("cell_groups.id"), nullable=True)
     consecutive_absences = db.Column(db.Integer, default=0)
+    # Mirrors consecutive_absences but counts the positive direction --
+    # maintained by the same _process_absence_check() diff, reset to 0
+    # on any absence the same way consecutive_absences resets to 0 on
+    # any presence. Powers the streak/milestone feature; never used for
+    # follow-up the way a mistake in consecutive_absences could.
+    consecutive_present = db.Column(db.Integer, default=0)
 
     tracked_for_attendance = db.Column(db.Boolean, default=True)
     # Leaders/admins are tracked for their own attendance by default.
@@ -207,6 +213,7 @@ class Member(db.Model):
             "cell_id": self.cell_id,
             "cell_name": self.cell.name if self.cell_id and self.cell else None,
             "consecutive_absences": self.consecutive_absences,
+            "consecutive_present": self.consecutive_present,
             "joined_date": self.joined_date.isoformat() if self.joined_date else None,
             # The Head Admin is the account first bootstrapped for this
             # church (Church.admin_user_id) -- protected from every
