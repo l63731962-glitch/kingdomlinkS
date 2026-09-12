@@ -213,6 +213,14 @@ class Member(db.Model):
             # demote/suspend action, per renderRoleActions()'s own guard
             # comment in index.html. Derived here, not stored twice.
             "is_head_admin": bool(self.church and self.church.admin_user_id == self.id),
+            # guardian_id/guardian_name are relational, not contact
+            # info -- kept outside include_sensitive (unlike phone/
+            # email/DOB below) so every caller of GET /members,
+            # including the attendance-taking roster, can show which
+            # guardian a child's absence will route to without also
+            # having to request the child's private fields.
+            "guardian_id": self.guardian_id,
+            "guardian_name": self.guardian.full_name if self.guardian else None,
         }
         if include_sensitive:
             data.update({
@@ -226,8 +234,6 @@ class Member(db.Model):
                 # a year-unknown birthday without ever needing to know
                 # about DOB_UNKNOWN_YEAR_SENTINEL itself.
                 "dob_month_day": self.date_of_birth.strftime("%m-%d") if self.date_of_birth else None,
-                "guardian_id": self.guardian_id,
-                "guardian_name": self.guardian.full_name if self.guardian else None,
             })
         return data
 
