@@ -19,7 +19,7 @@ Every time attendance is submitted for a service:
      to the church admin/pastor, independent of the leader's queue.
 """
 
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from app.database import db
 from app.models import (
     Member, AttendanceRecord, FollowUpAssignment, Church, EventRSVP,
@@ -290,11 +290,13 @@ def _process_absence_check(person, service_id, today, present_set, threshold, ch
 
     if is_present:
         person.consecutive_absences = 0
+        person.consecutive_present = (person.consecutive_present or 0) + 1
         record.follow_up_status = "not_applicable"
         db.session.add(record)
         return None  # nothing pending for an attended record
 
     person.consecutive_absences = (person.consecutive_absences or 0) + 1
+    person.consecutive_present = 0
     record.follow_up_status = "not_started"
     db.session.add(record)
     db.session.flush()
@@ -659,3 +661,189 @@ def _log_notification(recipient_id, trigger, assignment_id=None):
     )
     db.session.add(log)
     return log
+
+
+def get_attendance_streaks(church_id, min_streak=3, limit=20):
+    """
+    Feature: streak/milestone recognition. Surfaces members whose
+    consecutive_present counter has reached min_streak or higher --
+    the positive-direction mirror of consecutive_absences, maintained
+    in the same _process_absence_check() diff that already runs on
+    every submit_attendance() call, so this needs no new data
+    collection, only a new read over the counter.
+    """
+    members = (
+        Member.query.filter(
+            Member.church_id == church_id,
+            Member.membership_status == "active",
+            Member.consecutive_present >= min_streak,
+        )
+        .order_by(Member.consecutive_present.desc())
+        .limit(limit)
+        .all()
+    )
+    return [
+        {
+            "member_id": m.id,
+            "full_name": m.full_name,
+            "role": m.role,
+            "consecutive_present": m.consecutive_present,
+            "cell_name": m.cell.name if m.cell_id and m.cell else None,
+        }
+        for m in members
+    ]
+
+
+def get_follow_up_outcome_stats(church_id, limit_days=90):
+    """
+    Feature: follow-up outcome analytics. Every completed follow-up
+    already stamps one of reached_ok | reached_concern | no_answer |
+    invalid_number onto its AttendanceRecord via complete_follow_up(),
+    but nothing before this aggregated across them. Broken out per
+    leader so a pattern of no-answers isn't invisible inside one
+    person's queue.
+    """
+    cutoff = date.today() - timedelta(days=limit_days)
+
+    church_member_ids = {
+        m.id for m in Member.query.filter_by(church_id=church_id).all()
+    }
+    completed_records = (
+        AttendanceRecord.query
+        .filter(
+            AttendanceRecord.member_id.in_(church_member_ids),
+            AttendanceRecord.date >= cutoff,
+            AttendanceRecord.follow_up_status.in_(
+                ["reached_ok", "reached_concern", "no_answer", "invalid_number"]
+            ),
+        )
+        .all()
+    )
+
+    totals = {"reached_ok": 0, "reached_concern": 0, "no_answer": 0, "invalid_number": 0}
+    for r in completed_records:
+        totals[r.follow_up_status] = totals.get(r.follow_up_status, 0) + 1
+
+    # Per-leader breakdown: who actually completed the follow-up
+    # (follow_up_by), not who it was originally assigned to.
+    by_leader = {}
+    for r in completed_records:
+        if not r.follow_up_by:
+            continue
+        by_leader.setdefault(r.follow_up_by, {"reached_ok": 0, "reached_concern": 0, "no_answer": 0, "invalid_number": 0})
+        by_leader[r.follow_up_by][r.follow_up_status] += 1
+
+    leader_rows = []
+    for leader_id, counts in by_leader.items():
+        leader = Member.query.get(leader_id)
+        total = sum(counts.values())
+        connected = counts["reached_ok"] + counts["reached_concern"]
+        leader_rows.append({
+            "leader_id": leader_id,
+            "leader_name": leader.full_name if leader else "Unknown",
+            "total_completed": total,
+            "connect_rate": round(connected / total * 100) if total else 0,
+            **counts,
+        })
+    leader_rows.sort(key=lambda r: r["total_completed"], reverse=True)
+
+    total_all = sum(totals.values())
+    connected_all = totals["reached_ok"] + totals["reached_concern"]
+
+    return {
+        "window_days": limit_days,
+        "totals": totals,
+        "overall_connect_rate": round(connected_all / total_all * 100) if total_all else 0,
+        "by_leader": leader_rows,
+    }
+
+
+def get_cell_compliance_summary(church_id):
+    """
+    Feature: cell compliance widget for the admin overview. Reuses
+    the existing CellGroup.consecutive_missed_weeks counter and
+    CellMeetingProof.status field that cell_compliance_logic.py
+    already maintains -- this function only reads and summarizes
+    them, since that tracking was already built but never surfaced
+    outside the per-cell drill-down.
+    """
+    from app.models import CellMeetingProof, CellGroup
+
+    cells = CellGroup.query.filter_by(church_id=church_id).all()
+    cell_ids = {c.id for c in cells}
+    pending_count = CellMeetingProof.query.filter(
+        CellMeetingProof.cell_id.in_(cell_ids),
+        CellMeetingProof.status == "pending",
+    ).count()
+    at_risk = [
+        {"cell_id": c.id, "name": c.name, "consecutive_missed_weeks": c.consecutive_missed_weeks or 0}
+        for c in cells if (c.consecutive_missed_weeks or 0) >= 2
+    ]
+    at_risk.sort(key=lambda c: c["consecutive_missed_weeks"], reverse=True)
+
+    return {
+        "total_cells": len(cells),
+        "pending_proof_review": pending_count,
+        "cells_at_risk": at_risk,
+    }
+
+
+def get_at_risk_leaders(church_id):
+    """
+    Feature: cross-reference leader self-attendance with their own
+    cell's meeting compliance. Each signal already exists separately
+    (Member.consecutive_absences for the leader's own attendance,
+    CellGroup.consecutive_missed_weeks for their cell's proof
+    submissions) but nothing currently flags a leader who is failing
+    on BOTH at once -- that compounding case is a stronger signal
+    than either alone.
+    """
+    from app.models import CellGroup
+
+    leaders = Member.query.filter(
+        Member.church_id == church_id,
+        Member.membership_status == "active",
+        Member.role == "leader",
+    ).all()
+
+    flagged = []
+    for leader in leaders:
+        cell = CellGroup.query.filter_by(leader_id=leader.id).first()
+        leader_absent = (leader.consecutive_absences or 0) >= 2
+        cell_missed = cell and (cell.consecutive_missed_weeks or 0) >= 2
+        if leader_absent and cell_missed:
+            flagged.append({
+                "leader_id": leader.id,
+                "leader_name": leader.full_name,
+                "leader_consecutive_absences": leader.consecutive_absences or 0,
+                "cell_id": cell.id,
+                "cell_name": cell.name,
+                "cell_consecutive_missed_weeks": cell.consecutive_missed_weeks or 0,
+            })
+    return flagged
+
+
+def get_visitor_conversion_funnel(church_id):
+    """
+    Feature: visitor-to-member conversion funnel. Visitor already
+    carries wants_follow_up, follow_up_status, and
+    converted_to_member_id -- this reshapes those existing fields
+    into funnel stages rather than collecting anything new.
+    """
+    from app.models import Visitor
+
+    all_visitors = Visitor.query.filter_by(church_id=church_id).all()
+    total = len(all_visitors)
+    wanted_follow_up = sum(1 for v in all_visitors if v.wants_follow_up)
+    contacted = sum(
+        1 for v in all_visitors
+        if v.wants_follow_up and v.follow_up_status not in (None, "not_contacted")
+    )
+    converted = sum(1 for v in all_visitors if v.converted_to_member_id is not None)
+
+    return {
+        "visited": total,
+        "wanted_follow_up": wanted_follow_up,
+        "contacted": contacted,
+        "converted": converted,
+    }
