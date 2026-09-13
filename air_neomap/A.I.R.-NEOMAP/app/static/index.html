@@ -1227,10 +1227,49 @@ a{ color:inherit; }
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 5v14M5 12h14"/></svg>
             Register member
           </button>
+          <button class="btn-small leader-plus" id="bulkImportBtn" onclick="openBulkImportModal()" style="display:none;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+            Import from Excel
+          </button>
         </div>
       </div>
       <div id="rosterDuplicatesPanel" style="display:none; margin-bottom:16px;"></div>
       <div id="memberGroups"></div>
+    </div>
+
+    <!-- ---- Bulk import modal ---- -->
+    <div class="modal-overlay" id="bulkImportModal">
+      <div class="modal-box" style="max-width:560px;">
+        <div class="modal-head">
+          <div>
+            <div class="modal-title">Import members from Excel</div>
+          </div>
+          <button class="modal-close" onclick="closeBulkImportModal()" aria-label="Close">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M18 6L6 18M6 6l12 12"/></svg>
+          </button>
+        </div>
+
+        <div id="bulkImportStep1">
+          <p class="led-meta" style="margin-bottom:12px;">
+            Upload a spreadsheet of members — useful when transcribing a paper attendance book.
+            Not sure of the format? <a href="#" onclick="downloadImportTemplate(event)">Download the template</a> first.
+          </p>
+          <input type="file" id="bulkImportFileInput" accept=".xlsx,.xlsm" style="margin-bottom:14px;">
+          <div class="field-err" id="bulkImportErr"></div>
+          <div class="modal-actions">
+            <button class="btn-ghost" onclick="closeBulkImportModal()">Cancel</button>
+            <button class="btn-primary" id="bulkImportSubmitBtn" onclick="submitBulkImport()">Upload and import</button>
+          </div>
+        </div>
+
+        <div id="bulkImportStep2" style="display:none;">
+          <div id="bulkImportSummary" style="margin-bottom:14px;"></div>
+          <div id="bulkImportReportList" style="max-height:320px; overflow-y:auto;"></div>
+          <div class="modal-actions">
+            <button class="btn-primary" onclick="closeBulkImportModal()">Done</button>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- ---- Cell leaders ---- -->
@@ -4022,6 +4061,111 @@ async function downloadDigestCsv(evt){
   }catch(e){
     alert('Could not export CSV: ' + e.message);
   }
+}
+
+function openBulkImportModal(){
+  document.getElementById('bulkImportFileInput').value = '';
+  document.getElementById('bulkImportErr').innerHTML = '';
+  document.getElementById('bulkImportStep1').style.display = 'block';
+  document.getElementById('bulkImportStep2').style.display = 'none';
+  document.getElementById('bulkImportSubmitBtn').disabled = false;
+  document.getElementById('bulkImportSubmitBtn').textContent = 'Upload and import';
+  document.getElementById('bulkImportModal').classList.add('active');
+}
+
+function closeBulkImportModal(){
+  document.getElementById('bulkImportModal').classList.remove('active');
+  // A successful import changes the roster -- refresh it so newly
+  // imported members show up without the admin needing to manually
+  // reload the page.
+  loadMembers();
+}
+
+async function downloadImportTemplate(evt){
+  if(evt) evt.preventDefault();
+  try{
+    const res = await fetch(API + '/members/bulk-import/template', { headers: authHeaders() });
+    if(res.status === 401){ logout(); throw new Error('Unauthorized'); }
+    if(!res.ok) throw new Error('Could not fetch template: ' + res.status);
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'neomap-member-import-template.xlsx';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }catch(e){
+    alert('Could not download template: ' + e.message);
+  }
+}
+
+async function submitBulkImport(){
+  const fileInput = document.getElementById('bulkImportFileInput');
+  const errEl = document.getElementById('bulkImportErr');
+  const btn = document.getElementById('bulkImportSubmitBtn');
+  errEl.innerHTML = '';
+
+  if(!fileInput.files || fileInput.files.length === 0){
+    errEl.innerHTML = errIcon('Choose a .xlsx file first.');
+    return;
+  }
+
+  const formData = new FormData();
+  formData.append('file', fileInput.files[0]);
+
+  btn.disabled = true;
+  btn.textContent = 'Importing…';
+  try{
+    // Not the api() helper: that always sets Content-Type: application/json,
+    // which would break the multipart file upload. fetch sets the correct
+    // multipart boundary itself as long as we don't set Content-Type manually.
+    const res = await fetch(API + '/members/bulk-import', {
+      method: 'POST',
+      // Deliberately NOT authHeaders() or api(): both set
+      // Content-Type: application/json, which would override the
+      // multipart/form-data boundary the browser needs to set itself
+      // for a file upload. Auth header only, added manually.
+      headers: TOKEN ? { 'Authorization': 'Bearer ' + TOKEN } : {},
+      body: formData,
+    });
+    if(res.status === 401){ logout(); throw new Error('Unauthorized'); }
+    const data = await res.json().catch(() => ({}));
+    if(!res.ok) throw new Error(data.error || ('Import failed: ' + res.status));
+
+    renderBulkImportReport(data);
+  }catch(e){
+    errEl.innerHTML = errIcon(e.message);
+    btn.disabled = false;
+    btn.textContent = 'Upload and import';
+  }
+}
+
+function renderBulkImportReport(data){
+  document.getElementById('bulkImportStep1').style.display = 'none';
+  document.getElementById('bulkImportStep2').style.display = 'block';
+
+  const summaryEl = document.getElementById('bulkImportSummary');
+  summaryEl.innerHTML = `
+    <div class="stat-row" style="margin-top:0;">
+      <div class="stat-card green"><div class="stat-val">${data.imported_count}</div><div class="stat-label">Imported</div></div>
+      <div class="stat-card clay"><div class="stat-val">${data.skipped_count}</div><div class="stat-label">Skipped</div></div>
+    </div>`;
+
+  const listEl = document.getElementById('bulkImportReportList');
+  if(data.report.length === 0){
+    listEl.innerHTML = emptyState('Nothing to show', 'The spreadsheet had no data rows.');
+    return;
+  }
+  listEl.innerHTML = data.report.map(r => `
+    <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px; padding:8px 0; border-top:1px solid var(--line); font-size:12.5px;">
+      <div>
+        <div><b>${escapeHtml(r.full_name)}</b> <span class="led-meta">row ${r.row}</span></div>
+        ${r.reason ? `<div class="led-meta" style="margin-top:2px;">${escapeHtml(r.reason)}</div>` : ''}
+      </div>
+      <span class="card-pill ${r.status === 'imported' ? 'ok' : 'flag'}" style="position:static; white-space:nowrap;">${r.status === 'imported' ? 'Imported' : 'Skipped'}</span>
+    </div>`).join('');
 }
 
 async function loadStreaksWidget(){
