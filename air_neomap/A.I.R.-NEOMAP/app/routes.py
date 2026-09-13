@@ -1940,6 +1940,45 @@ def _import_row_to_dict(header_map, row_cells):
     return out
 
 
+def _generate_logo_png():
+    """
+    Recreates the app's own brand-mark tile (the orange rounded
+    square with a white 'N', same as .brand-mark in the login/nav UI)
+    as a standalone PNG so it can be embedded in a generated .xlsx --
+    openpyxl can't draw the CSS shape directly, only place an actual
+    image file, so this renders one in memory rather than shipping a
+    static asset that could drift out of sync with the real UI color.
+    Matches --clay: #C97A5D and the 6px-proportional rounded corner
+    from .brand-mark's CSS exactly, scaled up for legibility at
+    spreadsheet size instead of the 26px nav-bar size.
+    """
+    from PIL import Image, ImageDraw, ImageFont
+
+    size = 160
+    corner_radius = 36  # proportional to .brand-mark's 6px on a 26px tile
+    img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(img)
+    draw.rounded_rectangle([0, 0, size - 1, size - 1], radius=corner_radius, fill="#C97A5D")
+
+    try:
+        font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 84)
+    except Exception:
+        font = ImageFont.load_default()
+
+    text = "N"
+    bbox = draw.textbbox((0, 0), text, font=font)
+    text_w, text_h = bbox[2] - bbox[0], bbox[3] - bbox[1]
+    draw.text(
+        ((size - text_w) / 2 - bbox[0], (size - text_h) / 2 - bbox[1]),
+        text, fill="#FFFFFF", font=font,
+    )
+
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    buf.seek(0)
+    return buf
+
+
 @bp.route("/members/bulk-import/template", methods=["GET"])
 @role_required(ROLE_ADMIN, ROLE_LEADER)
 def bulk_import_template():
@@ -1948,14 +1987,38 @@ def bulk_import_template():
     expects, plus one example row and a legend sheet -- so someone
     typing up a paper attendance book has the right shape in front of
     them instead of guessing column names that then silently fail to
-    map on upload.
+    map on upload. Branded with the app's own logo tile so it's
+    recognizable as belonging to this app rather than a generic sheet.
     """
     from openpyxl import Workbook
     from openpyxl.styles import Font, PatternFill
+    from openpyxl.drawing.image import Image as XLImage
 
     wb = Workbook()
     ws = wb.active
     ws.title = "Members"
+
+    # Logo goes in its own row above the header row, rather than
+    # overlapping it -- an embedded image floats over whatever cells
+    # are beneath it, so reserving row 1-3 for the image and starting
+    # real headers at row 4 avoids the logo visually covering data.
+    try:
+        logo_buf = _generate_logo_png()
+        logo_img = XLImage(logo_buf)
+        logo_img.width = 48
+        logo_img.height = 48
+        ws.add_image(logo_img, "A1")
+        ws.cell(row=1, column=2, value="KingdomLink").font = Font(bold=True, size=14, color="C97A5D")
+        ws.cell(row=2, column=2, value="Member import template").font = Font(italic=True, size=10, color="808080")
+    except Exception:
+        # Logo generation is a visual nicety, not the point of this
+        # file -- if Pillow or the font is unavailable in some
+        # environment, the template must still download successfully
+        # with working headers rather than 500ing on a missing font.
+        ws.cell(row=1, column=1, value="KingdomLink — Member import template").font = Font(bold=True, size=14)
+
+    header_row_num = 4
+    ws.row_dimensions[1].height = 36
 
     headers = [
         "full_name", "role", "email", "phone", "area",
@@ -1963,7 +2026,7 @@ def bulk_import_template():
     ]
     header_fill = PatternFill(start_color="FFE8DED4", end_color="FFE8DED4", fill_type="solid")
     for col_idx, h in enumerate(headers, start=1):
-        cell = ws.cell(row=1, column=col_idx, value=h)
+        cell = ws.cell(row=header_row_num, column=col_idx, value=h)
         cell.font = Font(bold=True)
         cell.fill = header_fill
 
@@ -1972,9 +2035,9 @@ def bulk_import_template():
         ["David Adeyemi", "child", "", "", "Ikeja", "", "07-22", "", "Grace Adeyemi"],
         ["Samuel Okoro", "leader", "sam.o@example.com", "0805-987-6543", "Yaba", "1985-11-02", "", "Hope Cell", ""],
     ]
-    for row_idx, row in enumerate(example_rows, start=2):
+    for row_offset, row in enumerate(example_rows):
         for col_idx, val in enumerate(row, start=1):
-            ws.cell(row=row_idx, column=col_idx, value=val)
+            ws.cell(row=header_row_num + 1 + row_offset, column=col_idx, value=val)
 
     for col_idx, width in enumerate([22, 10, 26, 16, 14, 14, 14, 16, 22], start=1):
         ws.column_dimensions[chr(64 + col_idx)].width = width
@@ -2057,19 +2120,34 @@ def bulk_import_members():
     if not rows:
         return jsonify({"error": "That spreadsheet has no rows"}), 400
 
-    header_row = [str(c).strip().lower() if c is not None else None for c in rows[0]]
     expected_fields = [
         "full_name", "role", "email", "phone", "area",
         "date_of_birth", "dob_month_day", "cell_name", "guardian_full_name",
     ]
-    header_map = {f: (header_row.index(f) if f in header_row else None) for f in expected_fields}
-    if header_map["full_name"] is None or header_map["role"] is None:
+
+    # The header isn't necessarily row 1 -- the downloadable template
+    # itself puts a logo/title in rows 1-3 and the real header on row
+    # 4, so someone who fills in the template exactly as given and
+    # re-uploads it unmodified must not have their file rejected.
+    # Scan for the first row containing both 'full_name' and 'role'
+    # rather than assuming a fixed position.
+    header_row_index = None
+    header_row = None
+    for idx, raw in enumerate(rows):
+        candidate = [str(c).strip().lower() if c is not None else None for c in raw]
+        if "full_name" in candidate and "role" in candidate:
+            header_row_index = idx
+            header_row = candidate
+            break
+
+    if header_row is None:
         return jsonify({
-            "error": "The header row must include at least 'full_name' and 'role' columns. "
-                     "Download the template for the exact expected column names."
+            "error": "Could not find a header row containing 'full_name' and 'role' columns anywhere in this "
+                     "sheet. Download the template for the exact expected column names."
         }), 400
 
-    data_rows = rows[1:]
+    header_map = {f: (header_row.index(f) if f in header_row else None) for f in expected_fields}
+    data_rows = rows[header_row_index + 1:]
 
     # Pre-index existing cells (by name) and existing members (by
     # normalized full name) once, rather than re-querying per row --
@@ -2096,7 +2174,7 @@ def bulk_import_members():
         report.append(entry)
 
     # ---------- Pass 1: everyone except children ----------
-    for i, raw_row in enumerate(data_rows, start=2):  # row 1 is the header
+    for i, raw_row in enumerate(data_rows, start=header_row_index + 2):  # +2: 1-indexed sheet rows, plus one past the header
         if raw_row is None or all(c is None for c in raw_row):
             continue  # silently skip fully blank rows -- not a data problem, just spreadsheet padding
         data = _import_row_to_dict(header_map, list(raw_row))
