@@ -1940,7 +1940,7 @@ def _import_row_to_dict(header_map, row_cells):
     return out
 
 
-def _generate_logo_png():
+def _generate_logo_png(display_size=160):
     """
     Recreates the app's own brand-mark tile (the orange rounded
     square with a white 'N', same as .brand-mark in the login/nav UI)
@@ -1949,19 +1949,28 @@ def _generate_logo_png():
     image file, so this renders one in memory rather than shipping a
     static asset that could drift out of sync with the real UI color.
     Matches --clay: #C97A5D and the 6px-proportional rounded corner
-    from .brand-mark's CSS exactly, scaled up for legibility at
-    spreadsheet size instead of the 26px nav-bar size.
+    from .brand-mark's CSS exactly.
+
+    Rendered at 4x display_size and downscaled with LANCZOS before
+    saving, rather than drawn directly at display_size or resized via
+    openpyxl.drawing.image.Image.width/height after construction --
+    openpyxl sets those attributes from the source file's actual
+    pixel dimensions at construction time and does NOT honor a
+    post-construction override on save (verified: assigning
+    Image.width/height after creating it had no effect on the saved
+    file's real size), so the source PNG itself must already be the
+    intended display size.
     """
     from PIL import Image, ImageDraw, ImageFont
 
-    size = 160
-    corner_radius = 36  # proportional to .brand-mark's 6px on a 26px tile
-    img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    render_size = display_size * 4  # supersample for a crisp downscale
+    corner_radius = int(render_size * (6 / 26))  # proportional to .brand-mark's 6px on a 26px tile
+    img = Image.new("RGBA", (render_size, render_size), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
-    draw.rounded_rectangle([0, 0, size - 1, size - 1], radius=corner_radius, fill="#C97A5D")
+    draw.rounded_rectangle([0, 0, render_size - 1, render_size - 1], radius=corner_radius, fill="#C97A5D")
 
     try:
-        font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 84)
+        font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", int(render_size * 0.525))
     except Exception:
         font = ImageFont.load_default()
 
@@ -1969,9 +1978,11 @@ def _generate_logo_png():
     bbox = draw.textbbox((0, 0), text, font=font)
     text_w, text_h = bbox[2] - bbox[0], bbox[3] - bbox[1]
     draw.text(
-        ((size - text_w) / 2 - bbox[0], (size - text_h) / 2 - bbox[1]),
+        ((render_size - text_w) / 2 - bbox[0], (render_size - text_h) / 2 - bbox[1]),
         text, fill="#FFFFFF", font=font,
     )
+
+    img = img.resize((display_size, display_size), Image.LANCZOS)
 
     buf = io.BytesIO()
     img.save(buf, format="PNG")
@@ -2002,14 +2013,17 @@ def bulk_import_template():
     # overlapping it -- an embedded image floats over whatever cells
     # are beneath it, so reserving row 1-3 for the image and starting
     # real headers at row 4 avoids the logo visually covering data.
+    # Logo spans rows 1-3, which are already reserved before the real
+    # header row -- sized to be clearly visible (previously 48x48,
+    # which Excel visually compressed against a 36px-tall row 1 and
+    # made the logo hard to actually see). Title text starts in
+    # column C now instead of B so it doesn't sit under the wider image.
     try:
-        logo_buf = _generate_logo_png()
+        logo_buf = _generate_logo_png(display_size=90)
         logo_img = XLImage(logo_buf)
-        logo_img.width = 48
-        logo_img.height = 48
         ws.add_image(logo_img, "A1")
-        ws.cell(row=1, column=2, value="KingdomLink").font = Font(bold=True, size=14, color="C97A5D")
-        ws.cell(row=2, column=2, value="Member import template").font = Font(italic=True, size=10, color="808080")
+        ws.cell(row=1, column=3, value="KingdomLink").font = Font(bold=True, size=18, color="C97A5D")
+        ws.cell(row=2, column=3, value="Member import template").font = Font(italic=True, size=11, color="808080")
     except Exception:
         # Logo generation is a visual nicety, not the point of this
         # file -- if Pillow or the font is unavailable in some
@@ -2018,7 +2032,10 @@ def bulk_import_template():
         ws.cell(row=1, column=1, value="KingdomLink — Member import template").font = Font(bold=True, size=14)
 
     header_row_num = 4
-    ws.row_dimensions[1].height = 36
+    ws.row_dimensions[1].height = 34
+    ws.row_dimensions[2].height = 20
+    ws.row_dimensions[3].height = 20
+    ws.column_dimensions["A"].width = 13
 
     headers = [
         "full_name", "role", "email", "phone", "area",
