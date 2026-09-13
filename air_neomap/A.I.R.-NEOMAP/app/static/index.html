@@ -1250,10 +1250,13 @@ a{ color:inherit; }
         </div>
 
         <div id="bulkImportStep1">
-          <p class="led-meta" style="margin-bottom:12px;">
+          <p class="led-meta" style="margin-bottom:10px;">
             Upload a spreadsheet of members — useful when transcribing a paper attendance book.
-            Not sure of the format? <a href="#" onclick="downloadImportTemplate(event)">Download the template</a> first.
           </p>
+          <button class="btn-secondary" style="width:100%; margin-bottom:16px; display:flex; align-items:center; justify-content:center; gap:8px;" onclick="downloadImportTemplate(event)">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+            Download the template
+          </button>
           <input type="file" id="bulkImportFileInput" accept=".xlsx,.xlsm" style="margin-bottom:14px;">
           <div class="field-err" id="bulkImportErr"></div>
           <div class="modal-actions">
