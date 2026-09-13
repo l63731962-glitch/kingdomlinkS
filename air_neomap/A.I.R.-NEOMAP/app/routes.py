@@ -2011,19 +2011,26 @@ def bulk_import_template():
 
     # Logo goes in its own row above the header row, rather than
     # overlapping it -- an embedded image floats over whatever cells
-    # are beneath it, so reserving row 1-3 for the image and starting
+    # are beneath it, so reserving rows 1-3 for the image and starting
     # real headers at row 4 avoids the logo visually covering data.
-    # Logo spans rows 1-3, which are already reserved before the real
-    # header row -- sized to be clearly visible (previously 48x48,
-    # which Excel visually compressed against a 36px-tall row 1 and
-    # made the logo hard to actually see). Title text starts in
-    # column C now instead of B so it doesn't sit under the wider image.
+    #
+    # Sized at 130px: the first attempt (48px) was accidentally left
+    # at the source PNG's raw size due to openpyxl not honoring a
+    # post-construction width/height override; the second attempt
+    # (90px) fixed that bug correctly -- confirmed by extracting the
+    # actual embedded image bytes and the drawing XML's <ext> value
+    # directly from a real saved file, not just re-reading
+    # openpyxl's own (previously-misleading) width/height report --
+    # but 90px still read as visually small on an actual screen at
+    # normal Excel zoom. This is a size/proportion choice, not a bug
+    # fix, so it's picked by rendering it and looking at it, not by
+    # picking a bigger-sounding number.
     try:
-        logo_buf = _generate_logo_png(display_size=90)
+        logo_buf = _generate_logo_png(display_size=130)
         logo_img = XLImage(logo_buf)
         ws.add_image(logo_img, "A1")
-        ws.cell(row=1, column=3, value="KingdomLink").font = Font(bold=True, size=18, color="C97A5D")
-        ws.cell(row=2, column=3, value="Member import template").font = Font(italic=True, size=11, color="808080")
+        ws.cell(row=1, column=3, value="KingdomLink").font = Font(bold=True, size=22, color="C97A5D")
+        ws.cell(row=2, column=3, value="Member import template").font = Font(italic=True, size=12, color="808080")
     except Exception:
         # Logo generation is a visual nicety, not the point of this
         # file -- if Pillow or the font is unavailable in some
@@ -2031,11 +2038,11 @@ def bulk_import_template():
         # with working headers rather than 500ing on a missing font.
         ws.cell(row=1, column=1, value="KingdomLink — Member import template").font = Font(bold=True, size=14)
 
-    header_row_num = 4
+    header_row_num = 5
     ws.row_dimensions[1].height = 34
-    ws.row_dimensions[2].height = 20
-    ws.row_dimensions[3].height = 20
-    ws.column_dimensions["A"].width = 13
+    ws.row_dimensions[2].height = 34
+    ws.row_dimensions[3].height = 34
+    ws.column_dimensions["A"].width = 19
 
     headers = [
         "full_name", "role", "email", "phone", "area",
