@@ -1,7 +1,7 @@
 from datetime import date as _date, timedelta
 import csv
 import io
-from flask import Blueprint, request, jsonify, Response
+from flask import Blueprint, request, jsonify, Response, send_file
 from app.database import db
 from app.models import (
     Member, Church, CellGroup, Service, Visitor, FollowUpAssignment,
@@ -27,6 +27,45 @@ from app.cell_compliance_logic import (
 )
 
 bp = Blueprint("neomap", __name__, url_prefix="/api")
+
+
+def _find_duplicate_matches(church_id, full_name, phone=None, dob=None, exclude_id=None):
+    """
+    Shared by check_duplicate_member (live UI warning) and
+    bulk_import_members (post-hoc report) so both flows agree on what
+    counts as a likely duplicate instead of two similar-but-drifting
+    implementations. See check_duplicate_member's own docstring for
+    why this is graded (name_dob/name_phone/name_only) rather than a
+    single yes/no, and why two different real people sharing a name
+    is allowed through, not blocked.
+    """
+    normalized_target = " ".join((full_name or "").lower().split())
+    if not normalized_target:
+        return []
+
+    candidates = Member.query.filter_by(church_id=church_id).all()
+    matches = []
+    for m in candidates:
+        if exclude_id and m.id == exclude_id:
+            continue
+        normalized_existing = " ".join((m.full_name or "").lower().split())
+        if normalized_existing != normalized_target:
+            continue
+
+        strong_reasons = []
+        if dob and m.date_of_birth and m.date_of_birth == dob:
+            strong_reasons.append("name_dob")
+        if phone and m.phone and m.phone.strip() == phone:
+            strong_reasons.append("name_phone")
+        reasons = strong_reasons if strong_reasons else ["name_only"]
+
+        matches.append({"member_id": m.id, "full_name": m.full_name, "match_reasons": reasons})
+
+    def _strength(match):
+        r = match["match_reasons"]
+        return 0 if ("name_dob" in r or "name_phone" in r) else 1
+    matches.sort(key=_strength)
+    return matches
 
 
 def _parse_date(value):
@@ -278,36 +317,18 @@ def check_duplicate_member():
         dob = None
     exclude_id = request.args.get("exclude_id", type=int)
 
-    # Case/whitespace-insensitive on purpose -- "Chidinma Okafor" vs
-    # "chidinma  okafor" is the exact kind of variation a name gets
-    # typed differently across two separate attendance-book entries,
-    # and should still be caught as the same underlying name.
-    normalized_target = " ".join(full_name.lower().split())
+    matches = _find_duplicate_matches(church_id, full_name, phone=phone, dob=dob, exclude_id=exclude_id)
 
-    candidates = Member.query.filter_by(church_id=church_id).all()
-
-    matches = []
-    for m in candidates:
-        if exclude_id and m.id == exclude_id:
+    # check_duplicate_member's response is richer than the shared
+    # helper's bare match dict (bulk import only needs enough to
+    # report a flag; the live UI warning needs enough to render a
+    # card) -- fetch full member rows to expand the reused matches.
+    enriched = []
+    for match in matches:
+        m = Member.query.get(match["member_id"])
+        if not m:
             continue
-        normalized_existing = " ".join((m.full_name or "").lower().split())
-        if normalized_existing != normalized_target:
-            continue
-
-        # Built as an explicit priority list rather than merged/deduped
-        # after the fact -- an earlier version of this tried to merge
-        # conditionally-added reasons and silently left a stray
-        # 'name_only' in the list whenever only the phone (not the dob)
-        # also matched. Building the full set up front and choosing
-        # from it removes that whole class of bug.
-        strong_reasons = []
-        if dob and m.date_of_birth and m.date_of_birth == dob:
-            strong_reasons.append("name_dob")
-        if phone and m.phone and m.phone.strip() == phone:
-            strong_reasons.append("name_phone")
-        reasons = strong_reasons if strong_reasons else ["name_only"]
-
-        matches.append({
+        enriched.append({
             "member_id": m.id,
             "full_name": m.full_name,
             "role": m.role,
@@ -315,18 +336,10 @@ def check_duplicate_member():
             "date_of_birth": m.date_of_birth.isoformat() if m.date_of_birth else None,
             "cell_name": m.cell.name if m.cell_id and m.cell else None,
             "joined_date": m.joined_date.isoformat() if m.joined_date else None,
-            "match_reasons": reasons,
+            "match_reasons": match["match_reasons"],
         })
 
-    # Strongest matches first: name+dob and name+phone before bare name_only.
-    def _strength(match):
-        r = match["match_reasons"]
-        if "name_dob" in r or "name_phone" in r:
-            return 0
-        return 1
-    matches.sort(key=_strength)
-
-    return jsonify({"matches": matches})
+    return jsonify({"matches": enriched})
 
 
 @bp.route("/members", methods=["GET"])
@@ -1902,3 +1915,318 @@ def admin_statistics_export_csv():
         mimetype="text/csv",
         headers={"Content-Disposition": f"attachment; filename={filename}"},
     )
+
+
+# ---------- Bulk member import (Excel) ----------
+
+_IMPORT_VALID_ROLES = {"adult", "teen", "child", "leader", "admin"}
+
+
+def _import_row_to_dict(header_map, row_cells):
+    """Zips a header-name -> column-index map against one row's cell
+    values, trimming whitespace on every string and treating a blank
+    cell as None rather than an empty string -- so a required-field
+    check like `if not data.get('full_name')` behaves the same
+    whether the cell was truly empty or contained only spaces."""
+    out = {}
+    for field, idx in header_map.items():
+        if idx is None or idx >= len(row_cells):
+            out[field] = None
+            continue
+        val = row_cells[idx]
+        if isinstance(val, str):
+            val = val.strip() or None
+        out[field] = val
+    return out
+
+
+@bp.route("/members/bulk-import/template", methods=["GET"])
+@role_required(ROLE_ADMIN, ROLE_LEADER)
+def bulk_import_template():
+    """
+    Downloadable .xlsx with the exact column headers bulk_import_members
+    expects, plus one example row and a legend sheet -- so someone
+    typing up a paper attendance book has the right shape in front of
+    them instead of guessing column names that then silently fail to
+    map on upload.
+    """
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Members"
+
+    headers = [
+        "full_name", "role", "email", "phone", "area",
+        "date_of_birth", "dob_month_day", "cell_name", "guardian_full_name",
+    ]
+    header_fill = PatternFill(start_color="FFE8DED4", end_color="FFE8DED4", fill_type="solid")
+    for col_idx, h in enumerate(headers, start=1):
+        cell = ws.cell(row=1, column=col_idx, value=h)
+        cell.font = Font(bold=True)
+        cell.fill = header_fill
+
+    example_rows = [
+        ["Grace Adeyemi", "adult", "grace.a@example.com", "0803-123-4567", "Ikeja", "1990-04-12", "", "Faith Cell", ""],
+        ["David Adeyemi", "child", "", "", "Ikeja", "", "07-22", "", "Grace Adeyemi"],
+        ["Samuel Okoro", "leader", "sam.o@example.com", "0805-987-6543", "Yaba", "1985-11-02", "", "Hope Cell", ""],
+    ]
+    for row_idx, row in enumerate(example_rows, start=2):
+        for col_idx, val in enumerate(row, start=1):
+            ws.cell(row=row_idx, column=col_idx, value=val)
+
+    for col_idx, width in enumerate([22, 10, 26, 16, 14, 14, 14, 16, 22], start=1):
+        ws.column_dimensions[chr(64 + col_idx)].width = width
+
+    legend = wb.create_sheet("Read me")
+    legend_lines = [
+        ("full_name", "Required. Full name as it should appear in the app."),
+        ("role", "Required. One of: adult, teen, child, leader, admin (lowercase)."),
+        ("email", "Needed only if this person will log in. Must be unique — leave blank if unsure."),
+        ("phone", "Optional."),
+        ("area", "Optional. Neighbourhood/zone, not full address."),
+        ("date_of_birth", "Optional. Use YYYY-MM-DD if the full birth year is known."),
+        ("dob_month_day", "Optional. Use MM-DD instead of date_of_birth if only month/day is known — never fill in both."),
+        ("cell_name", "Optional. Must exactly match an existing cell's name in the app, or leave blank."),
+        ("guardian_full_name", "Required for role=child. Must exactly match another row's full_name in THIS same file, or an existing member already in the app."),
+    ]
+    legend.cell(row=1, column=1, value="Column").font = Font(bold=True)
+    legend.cell(row=1, column=2, value="Notes").font = Font(bold=True)
+    for i, (col, note) in enumerate(legend_lines, start=2):
+        legend.cell(row=i, column=1, value=col)
+        legend.cell(row=i, column=2, value=note)
+    legend.column_dimensions["A"].width = 20
+    legend.column_dimensions["B"].width = 90
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return send_file(
+        buf,
+        as_attachment=True,
+        download_name="neomap-member-import-template.xlsx",
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+
+
+@bp.route("/members/bulk-import", methods=["POST"])
+@role_required(ROLE_ADMIN, ROLE_LEADER)
+@church_scoped
+def bulk_import_members():
+    """
+    Feature: bulk member import from a spreadsheet, so someone
+    transcribing a paper attendance book isn't stuck typing every
+    person into the register-member form one at a time.
+
+    Per-row failure handling: a bad row is skipped, not fatal -- one
+    malformed row (missing name, unknown role, a guardian name that
+    doesn't resolve) should never block the 40 good rows above and
+    below it. Every row's outcome (imported / skipped + why) comes
+    back in one report so the admin can see exactly what to fix and
+    re-upload just the corrections, rather than guessing which of
+    200 rows silently failed.
+
+    Two-pass over the sheet: pass 1 creates every non-child row (so
+    any name that might be referenced as a guardian_full_name exists
+    with a real id first); pass 2 creates children and resolves their
+    guardian against either a freshly-created row from pass 1 or an
+    existing member already in the church. This lets one spreadsheet
+    contain a parent and their child without requiring the child's
+    row to come after the parent's, and without a two-file upload.
+    """
+    from openpyxl import load_workbook
+
+    if "file" not in request.files:
+        return jsonify({"error": "No file uploaded — expected multipart field 'file'"}), 400
+
+    upload = request.files["file"]
+    if not upload.filename or not upload.filename.lower().endswith((".xlsx", ".xlsm")):
+        return jsonify({"error": "Please upload an .xlsx file (the downloadable template is .xlsx)"}), 400
+
+    church_id = request.current_member["church_id"]
+    created_by_id = request.current_member["member_id"]
+
+    try:
+        wb = load_workbook(upload, data_only=True)
+        ws = wb.worksheets[0]
+    except Exception as e:
+        return jsonify({"error": f"Could not read that file as an Excel spreadsheet: {e}"}), 400
+
+    rows = list(ws.iter_rows(values_only=True))
+    if not rows:
+        return jsonify({"error": "That spreadsheet has no rows"}), 400
+
+    header_row = [str(c).strip().lower() if c is not None else None for c in rows[0]]
+    expected_fields = [
+        "full_name", "role", "email", "phone", "area",
+        "date_of_birth", "dob_month_day", "cell_name", "guardian_full_name",
+    ]
+    header_map = {f: (header_row.index(f) if f in header_row else None) for f in expected_fields}
+    if header_map["full_name"] is None or header_map["role"] is None:
+        return jsonify({
+            "error": "The header row must include at least 'full_name' and 'role' columns. "
+                     "Download the template for the exact expected column names."
+        }), 400
+
+    data_rows = rows[1:]
+
+    # Pre-index existing cells (by name) and existing members (by
+    # normalized full name) once, rather than re-querying per row --
+    # a book with hundreds of entries would otherwise mean hundreds
+    # of duplicate-cell/duplicate-name queries.
+    existing_cells_by_name = {
+        c.name.strip().lower(): c for c in CellGroup.query.filter_by(church_id=church_id).all()
+    }
+    existing_members_by_name = {}
+    for m in Member.query.filter_by(church_id=church_id).all():
+        key = " ".join((m.full_name or "").lower().split())
+        existing_members_by_name.setdefault(key, []).append(m)
+
+    report = []  # one entry per data row, in order
+    newly_created_by_name = {}  # normalized name -> Member, for guardian resolution within this file
+    child_rows_deferred = []  # (row_number, data) pairs to process in pass 2
+
+    def _report(row_number, name, status, reason=None, member_id=None):
+        entry = {"row": row_number, "full_name": name, "status": status}
+        if reason:
+            entry["reason"] = reason
+        if member_id:
+            entry["member_id"] = member_id
+        report.append(entry)
+
+    # ---------- Pass 1: everyone except children ----------
+    for i, raw_row in enumerate(data_rows, start=2):  # row 1 is the header
+        if raw_row is None or all(c is None for c in raw_row):
+            continue  # silently skip fully blank rows -- not a data problem, just spreadsheet padding
+        data = _import_row_to_dict(header_map, list(raw_row))
+        name = data.get("full_name")
+        role = (data.get("role") or "").strip().lower() if data.get("role") else None
+
+        if not name:
+            _report(i, data.get("full_name") or "(blank)", "skipped", "Missing full_name")
+            continue
+        if not role:
+            _report(i, name, "skipped", "Missing role")
+            continue
+        if role not in _IMPORT_VALID_ROLES:
+            _report(i, name, "skipped", f"Unknown role '{role}' — must be one of {sorted(_IMPORT_VALID_ROLES)}")
+            continue
+
+        if role == "child":
+            child_rows_deferred.append((i, data))
+            continue  # handled in pass 2, after every potential guardian exists
+
+        email = data.get("email")
+        if email:
+            dup_email = Member.query.filter_by(email=email).first()
+            if dup_email or any(m.email == email for m in newly_created_by_name.values()):
+                _report(i, name, "skipped", f"Email '{email}' is already registered to another member")
+                continue
+
+        try:
+            dob, dob_year_unknown = _parse_dob_fields({
+                "date_of_birth": data.get("date_of_birth"),
+                "dob_month_day": data.get("dob_month_day"),
+            })
+        except ValueError as e:
+            _report(i, name, "skipped", str(e))
+            continue
+        except Exception:
+            _report(i, name, "skipped", "Could not read date_of_birth/dob_month_day — check the format")
+            continue
+
+        cell_id = None
+        cell_name = data.get("cell_name")
+        if cell_name:
+            cell = existing_cells_by_name.get(cell_name.strip().lower())
+            if not cell:
+                _report(i, name, "skipped", f"Cell '{cell_name}' does not exist in this church yet")
+                continue
+            cell_id = cell.id
+
+        dup_matches = _find_duplicate_matches(church_id, name, phone=data.get("phone"), dob=dob)
+        strong_dup = next((m for m in dup_matches if "name_dob" in m["match_reasons"] or "name_phone" in m["match_reasons"]), None)
+        if strong_dup:
+            _report(i, name, "skipped",
+                     f"Likely duplicate of existing member '{strong_dup['full_name']}' (id {strong_dup['member_id']}) — "
+                     f"same name and matching {'birth date' if 'name_dob' in strong_dup['match_reasons'] else 'phone number'}. "
+                     f"Remove this row and re-upload if it's genuinely the same person.")
+            continue
+
+        member = Member(
+            church_id=church_id,
+            full_name=name,
+            role=role,
+            date_of_birth=dob,
+            dob_year_unknown=dob_year_unknown,
+            phone=data.get("phone"),
+            area=data.get("area"),
+            email=email,
+            cell_id=cell_id,
+            created_by=created_by_id,
+        )
+        db.session.add(member)
+        db.session.flush()  # assigns member.id without committing yet, so pass 2 can reference it as a guardian
+
+        key = " ".join(name.lower().split())
+        newly_created_by_name[key] = member
+        _report(i, name, "imported", member_id=member.id)
+
+    # ---------- Pass 2: children, guardian resolved against pass 1 + pre-existing members ----------
+    for i, data in child_rows_deferred:
+        name = data.get("full_name")
+        guardian_name = data.get("guardian_full_name")
+        if not guardian_name:
+            _report(i, name, "skipped", "role=child requires guardian_full_name")
+            continue
+
+        guardian_key = " ".join(guardian_name.lower().split())
+        guardian = newly_created_by_name.get(guardian_key)
+        if not guardian:
+            existing = existing_members_by_name.get(guardian_key)
+            guardian = existing[0] if existing else None
+        if not guardian:
+            _report(i, name, "skipped", f"Guardian '{guardian_name}' not found in this file or in existing members")
+            continue
+
+        try:
+            dob, dob_year_unknown = _parse_dob_fields({
+                "date_of_birth": data.get("date_of_birth"),
+                "dob_month_day": data.get("dob_month_day"),
+            })
+        except ValueError as e:
+            _report(i, name, "skipped", str(e))
+            continue
+
+        dup_matches = _find_duplicate_matches(church_id, name, phone=data.get("phone"), dob=dob)
+        strong_dup = next((m for m in dup_matches if "name_dob" in m["match_reasons"]), None)
+        if strong_dup:
+            _report(i, name, "skipped",
+                     f"Likely duplicate of existing member '{strong_dup['full_name']}' (id {strong_dup['member_id']}) — same name and birth date.")
+            continue
+
+        child = Member(
+            church_id=church_id,
+            full_name=name,
+            role="child",
+            date_of_birth=dob,
+            dob_year_unknown=dob_year_unknown,
+            guardian_id=guardian.id,
+            area=data.get("area"),
+            created_by=created_by_id,
+            # No email/password for children, same rule register_member enforces.
+        )
+        db.session.add(child)
+        db.session.flush()
+        _report(i, name, "imported", member_id=child.id)
+
+    db.session.commit()
+
+    imported_count = sum(1 for r in report if r["status"] == "imported")
+    skipped_count = sum(1 for r in report if r["status"] == "skipped")
+    return jsonify({
+        "imported_count": imported_count,
+        "skipped_count": skipped_count,
+        "report": report,
+    }), 200
