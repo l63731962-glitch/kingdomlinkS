@@ -1,4 +1,4 @@
-from datetime import date as _date, timedelta
+from datetime import date as _date, datetime, timedelta
 import csv
 import io
 from flask import Blueprint, request, jsonify, Response, send_file
@@ -97,6 +97,19 @@ def _parse_dob_fields(data):
     dob.replace(year=today.year) calls), so which sentinel year is
     picked has zero effect on birthday matching, only on making sure
     the value is a real, storable date.
+
+    dob_month_day accepts either a plain "MM-DD" string OR an actual
+    date/datetime object -- the latter shows up specifically from
+    Excel imports: if a cell isn't explicitly formatted as Text before
+    typing into it, Excel silently reinterprets something like "05-22"
+    as a real date and displays it as "22-May", and openpyxl then
+    hands back a genuine datetime.date/datetime object for that cell,
+    not the string it looks like on screen. Rejecting that as "not
+    MM-DD format" is technically correct but unhelpful when the month
+    and day are still right there on the object; read them off
+    directly instead of forcing the person to first learn about
+    Excel's autoformatting to fix an error message that doesn't
+    explain what actually happened.
     """
     has_full = bool(data.get("date_of_birth"))
     has_month_day = bool(data.get("dob_month_day"))
@@ -106,11 +119,19 @@ def _parse_dob_fields(data):
 
     if has_month_day:
         raw = data["dob_month_day"]
-        try:
-            month, day = raw.split("-")
-            month, day = int(month), int(day)
-        except (ValueError, AttributeError):
-            raise ValueError("dob_month_day must be in MM-DD format")
+        if isinstance(raw, (_date, datetime)):
+            month, day = raw.month, raw.day
+        else:
+            try:
+                month, day = raw.split("-")
+                month, day = int(month), int(day)
+            except (ValueError, AttributeError):
+                raise ValueError(
+                    "dob_month_day must be in MM-DD format. If this came from Excel, the cell was "
+                    "likely auto-converted to a date (e.g. shows as '22-May') -- format that column "
+                    "as Text before typing into it, or re-enter the value with a leading apostrophe "
+                    "like '05-22."
+                )
         try:
             dob = _date(DOB_UNKNOWN_YEAR_SENTINEL, month, day)
         except ValueError:
@@ -2188,6 +2209,7 @@ def bulk_import_members():
     report = []  # one entry per data row, in order
     newly_created_by_name = {}  # normalized name -> Member, for guardian resolution within this file
     child_rows_deferred = []  # (row_number, data) pairs to process in pass 2
+    seen_names_this_file = {}  # normalized name -> first row number seen at, for in-file duplicate detection
 
     def _report(row_number, name, status, reason=None, member_id=None):
         entry = {"row": row_number, "full_name": name, "status": status}
@@ -2215,16 +2237,46 @@ def bulk_import_members():
             _report(i, name, "skipped", f"Unknown role '{role}' — must be one of {sorted(_IMPORT_VALID_ROLES)}")
             continue
 
+        # Within-file duplicate check: two rows in THIS upload with the
+        # exact same name. Distinct from _find_duplicate_matches below,
+        # which checks against members already in the app -- this
+        # catches a name accidentally typed twice while transcribing a
+        # paper book, before it ever reaches the database at all.
+        name_key = " ".join(name.lower().split())
+        if role != "child" and name_key in seen_names_this_file:
+            _report(i, name, "skipped",
+                     f"Same name appears twice in this file (also on row {seen_names_this_file[name_key]}). "
+                     f"If these are two different people, make the names distinguishable (e.g. add a middle "
+                     f"name); if it's a duplicate entry, delete one of the rows and re-upload.")
+            continue
+        if role != "child":
+            seen_names_this_file[name_key] = i
+
         if role == "child":
             child_rows_deferred.append((i, data))
             continue  # handled in pass 2, after every potential guardian exists
 
         email = data.get("email")
+        matched_existing_by_email = None
         if email:
             dup_email = Member.query.filter_by(email=email).first()
-            if dup_email or any(m.email == email for m in newly_created_by_name.values()):
-                _report(i, name, "skipped", f"Email '{email}' is already registered to another member")
+            newly_created_email_dup = next((m for m in newly_created_by_name.values() if m.email == email), None)
+            if newly_created_email_dup:
+                # Two rows in THIS file reused the same email -- that's
+                # a data problem in the sheet itself, not a re-upload
+                # match, since both can't be the same already-existing
+                # person.
+                _report(i, name, "skipped", f"Email '{email}' is already used by another row in this file")
                 continue
+            if dup_email:
+                # An email matching an existing member is actually a
+                # STRONG signal this is the same person re-appearing
+                # on a re-upload -- treat it as a duplicate to
+                # reconcile below, not as an unrelated error. Emails
+                # are unique per member.query.filter_by(email=email),
+                # so this can only be the same account, never two
+                # different people who happen to share one.
+                matched_existing_by_email = dup_email
 
         try:
             dob, dob_year_unknown = _parse_dob_fields({
@@ -2247,13 +2299,48 @@ def bulk_import_members():
                 continue
             cell_id = cell.id
 
+        if matched_existing_by_email:
+            # Email match is the strongest possible signal -- stronger
+            # than name+dob or name+phone, since email uniqueness is
+            # enforced at the database level. No need to also run
+            # _find_duplicate_matches for this row; the email already
+            # settled it.
+            _report(i, name, "already_exists",
+                     f"Matches existing member '{matched_existing_by_email.full_name}' (id {matched_existing_by_email.id}) — same email address. Not re-imported.",
+                     member_id=matched_existing_by_email.id)
+            continue
+
         dup_matches = _find_duplicate_matches(church_id, name, phone=data.get("phone"), dob=dob)
         strong_dup = next((m for m in dup_matches if "name_dob" in m["match_reasons"] or "name_phone" in m["match_reasons"]), None)
         if strong_dup:
-            _report(i, name, "skipped",
-                     f"Likely duplicate of existing member '{strong_dup['full_name']}' (id {strong_dup['member_id']}) — "
-                     f"same name and matching {'birth date' if 'name_dob' in strong_dup['match_reasons'] else 'phone number'}. "
-                     f"Remove this row and re-upload if it's genuinely the same person.")
+            # 'already_exists' is a distinct status from 'skipped' --
+            # this is expected, correct behavior on a repeated upload
+            # of the same sheet (or a sheet with new rows appended to
+            # the bottom of previously-imported ones), not an error to
+            # fix. Reporting it the same as a bad row made every
+            # re-upload look like it was full of problems.
+            _report(i, name, "already_exists",
+                     f"Matches existing member '{strong_dup['full_name']}' (id {strong_dup['member_id']}) — "
+                     f"same name and matching {'birth date' if 'name_dob' in strong_dup['match_reasons'] else 'phone number'}. Not re-imported.",
+                     member_id=strong_dup['member_id'])
+            continue
+
+        weak_dup = dup_matches[0] if dup_matches else None  # name_only, no dob/phone corroboration
+        if weak_dup:
+            # Deliberately NOT auto-skipped and NOT auto-imported.
+            # A bare name match with nothing else to go on could be
+            # the same person re-appearing on a sparse re-upload (no
+            # DOB/phone in that row), or it could be a second real
+            # person who happens to share a name -- the app can't
+            # tell the difference from a name alone, so this is
+            # reported as its own status for a human to decide,
+            # rather than silently guessing either way.
+            _report(i, name, "needs_review",
+                     f"A member named '{weak_dup['full_name']}' (id {weak_dup['member_id']}) already exists, but this "
+                     f"row has no birth date or phone number to confirm whether it's the same person or someone else "
+                     f"with the same name. Not imported — add a birth date or phone to this row and re-upload if it's "
+                     f"a different person, or leave it out if it's the same person already in the app.",
+                     member_id=weak_dup['member_id'])
             continue
 
         member = Member(
@@ -2283,6 +2370,17 @@ def bulk_import_members():
             _report(i, name, "skipped", "role=child requires guardian_full_name")
             continue
 
+        # Same in-file duplicate check as pass 1's non-child rows,
+        # applied to children here since they're handled in a
+        # separate loop rather than falling through the shared check
+        # above.
+        name_key = " ".join(name.lower().split())
+        if name_key in seen_names_this_file:
+            _report(i, name, "skipped",
+                     f"Same name appears twice in this file (also on row {seen_names_this_file[name_key]}).")
+            continue
+        seen_names_this_file[name_key] = i
+
         guardian_key = " ".join(guardian_name.lower().split())
         guardian = newly_created_by_name.get(guardian_key)
         if not guardian:
@@ -2304,8 +2402,18 @@ def bulk_import_members():
         dup_matches = _find_duplicate_matches(church_id, name, phone=data.get("phone"), dob=dob)
         strong_dup = next((m for m in dup_matches if "name_dob" in m["match_reasons"]), None)
         if strong_dup:
-            _report(i, name, "skipped",
-                     f"Likely duplicate of existing member '{strong_dup['full_name']}' (id {strong_dup['member_id']}) — same name and birth date.")
+            _report(i, name, "already_exists",
+                     f"Matches existing member '{strong_dup['full_name']}' (id {strong_dup['member_id']}) — same name and birth date. Not re-imported.",
+                     member_id=strong_dup['member_id'])
+            continue
+
+        weak_dup = dup_matches[0] if dup_matches else None
+        if weak_dup:
+            _report(i, name, "needs_review",
+                     f"A member named '{weak_dup['full_name']}' (id {weak_dup['member_id']}) already exists, but this "
+                     f"row has no birth date to confirm whether it's the same child or a different one with the same "
+                     f"name. Not imported — add a birth date and re-upload if it's a different person.",
+                     member_id=weak_dup['member_id'])
             continue
 
         child = Member(
@@ -2326,9 +2434,13 @@ def bulk_import_members():
     db.session.commit()
 
     imported_count = sum(1 for r in report if r["status"] == "imported")
+    already_exists_count = sum(1 for r in report if r["status"] == "already_exists")
+    needs_review_count = sum(1 for r in report if r["status"] == "needs_review")
     skipped_count = sum(1 for r in report if r["status"] == "skipped")
     return jsonify({
         "imported_count": imported_count,
+        "already_exists_count": already_exists_count,
+        "needs_review_count": needs_review_count,
         "skipped_count": skipped_count,
         "report": report,
     }), 200
