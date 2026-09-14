@@ -4153,7 +4153,9 @@ function renderBulkImportReport(data){
   summaryEl.innerHTML = `
     <div class="stat-row" style="margin-top:0;">
       <div class="stat-card green"><div class="stat-val">${data.imported_count}</div><div class="stat-label">Imported</div></div>
-      <div class="stat-card clay"><div class="stat-val">${data.skipped_count}</div><div class="stat-label">Skipped</div></div>
+      <div class="stat-card"><div class="stat-val">${data.already_exists_count ?? 0}</div><div class="stat-label">Already in app</div></div>
+      <div class="stat-card gold"><div class="stat-val">${data.needs_review_count ?? 0}</div><div class="stat-label">Needs review</div></div>
+      <div class="stat-card clay"><div class="stat-val">${data.skipped_count}</div><div class="stat-label">Needs fixing</div></div>
     </div>`;
 
   const listEl = document.getElementById('bulkImportReportList');
@@ -4161,13 +4163,15 @@ function renderBulkImportReport(data){
     listEl.innerHTML = emptyState('Nothing to show', 'The spreadsheet had no data rows.');
     return;
   }
+  const statusLabel = { imported: 'Imported', already_exists: 'Already in app', needs_review: 'Needs review', skipped: 'Needs fixing' };
+  const statusClass = { imported: 'ok', already_exists: '', needs_review: 'flag', skipped: 'flag' };
   listEl.innerHTML = data.report.map(r => `
     <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px; padding:8px 0; border-top:1px solid var(--line); font-size:12.5px;">
       <div>
         <div><b>${escapeHtml(r.full_name)}</b> <span class="led-meta">row ${r.row}</span></div>
         ${r.reason ? `<div class="led-meta" style="margin-top:2px;">${escapeHtml(r.reason)}</div>` : ''}
       </div>
-      <span class="card-pill ${r.status === 'imported' ? 'ok' : 'flag'}" style="position:static; white-space:nowrap;">${r.status === 'imported' ? 'Imported' : 'Skipped'}</span>
+      <span class="card-pill ${statusClass[r.status] || 'flag'}" style="position:static; white-space:nowrap;">${statusLabel[r.status] || r.status}</span>
     </div>`).join('');
 }
 
