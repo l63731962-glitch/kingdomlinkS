@@ -4,5 +4,6 @@ pyjwt
 werkzeug
 gunicorn
 psycopg2-binary
+psycopg[binary]
 openpyxl
 Pillow
